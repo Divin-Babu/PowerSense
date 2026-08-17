@@ -84,6 +84,7 @@ export interface UserProfile {
 }
 
 export interface AppState {
+  theme: 'light' | 'dark';
   isLoggedIn: boolean;
   currentScreen?: ScreenType;
   user: UserProfile;

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { AppState, Appliance, AlertItem, KnowledgeItem, SinglePlugData, SinglePlugLoadPreset } from '../types';
+import { getThemeColors, ThemePalette, ThemeMode } from '../theme/colors';
 
 import {
   fetchLiveTelemetry,
@@ -29,7 +30,19 @@ const INITIAL_SINGLE_PLUG: SinglePlugData = {
   presets: [],
 };
 
+const getInitialTheme = (): ThemeMode => {
+  try {
+    const g = globalThis as any;
+    if (typeof g !== 'undefined' && g.localStorage) {
+      const saved = g.localStorage.getItem('powersense_theme');
+      if (saved === 'dark' || saved === 'light') return saved;
+    }
+  } catch (e) {}
+  return 'light';
+};
+
 const INITIAL_STATE: AppState = {
+  theme: getInitialTheme(),
   user: {
     name: '',
     email: '',
@@ -84,6 +97,11 @@ const INITIAL_STATE: AppState = {
 
 interface StoreContextType {
   state: AppState;
+  theme: ThemeMode;
+  isDark: boolean;
+  themeColors: ThemePalette;
+  toggleTheme: () => void;
+  setTheme: (theme: ThemeMode) => void;
   togglePlugRelay: () => void;
   selectPlugPreset: (presetId: string) => void;
   triggerSimulatedAnomaly: () => void;
@@ -191,6 +209,65 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // Hydrate session and theme from storage on mount
+  useEffect(() => {
+    try {
+      const g = globalThis as any;
+      if (typeof g !== 'undefined' && g.localStorage) {
+        const savedTheme = g.localStorage.getItem('powersense_theme');
+        const savedSession = g.localStorage.getItem('powersense_session');
+        
+        setState((prev) => {
+          let updated = { ...prev };
+          if (savedTheme === 'dark' || savedTheme === 'light') {
+            updated.theme = savedTheme;
+          }
+          if (savedSession) {
+            try {
+              const parsed = JSON.parse(savedSession);
+              if (parsed && parsed.isLoggedIn && parsed.user) {
+                updated.isLoggedIn = true;
+                updated.user = parsed.user;
+              }
+            } catch (err) {}
+          }
+          return updated;
+        });
+      }
+    } catch (e) {
+      console.warn('Could not restore session/theme from storage:', e);
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    setState((prev) => {
+      const nextTheme: ThemeMode = prev.theme === 'dark' ? 'light' : 'dark';
+      try {
+        const g = globalThis as any;
+        if (typeof g !== 'undefined' && g.localStorage) {
+          g.localStorage.setItem('powersense_theme', nextTheme);
+        }
+      } catch (e) {}
+      return {
+        ...prev,
+        theme: nextTheme,
+      };
+    });
+  };
+
+  const setTheme = (mode: ThemeMode) => {
+    try {
+      const g = globalThis as any;
+      if (typeof g !== 'undefined' && g.localStorage) {
+        g.localStorage.setItem('powersense_theme', mode);
+      }
+    } catch (e) {}
+    setState((prev) => ({
+      ...prev,
+      theme: mode,
+    }));
+  };
+
   const togglePlugRelay = () => {
     setState((prev) => {
       const nextRelay = prev.singlePlug.relayState === 'ON' ? 'OFF' : 'ON';
@@ -268,28 +345,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       alerts: prev.alerts.filter((a) => a.id !== id),
     }));
   };
-
-  // Hydrate session from storage on mount
-  useEffect(() => {
-    try {
-      const g = globalThis as any;
-      if (typeof g !== 'undefined' && g.localStorage) {
-        const saved = g.localStorage.getItem('powersense_session');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed && parsed.isLoggedIn && parsed.user) {
-            setState((prev) => ({
-              ...prev,
-              isLoggedIn: true,
-              user: parsed.user,
-            }));
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('Could not restore session from storage:', e);
-    }
-  }, []);
 
   const login = (email: string, name?: string, role?: string, phone?: string) => {
     const userRole = role || (email?.toLowerCase().includes('admin') ? 'admin' : 'user');
@@ -370,10 +425,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
+  const isDark = state.theme === 'dark';
+  const themeColors = getThemeColors(state.theme);
+
   return (
     <StoreContext.Provider
       value={{
         state,
+        theme: state.theme,
+        isDark,
+        themeColors,
+        toggleTheme,
+        setTheme,
         togglePlugRelay,
         selectPlugPreset,
         triggerSimulatedAnomaly,

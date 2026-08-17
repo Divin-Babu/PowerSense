@@ -12,7 +12,7 @@ export function Register() {
         
         <div class="space-y-md relative z-10">
           <div class="flex items-center gap-sm">
-            <div class="w-12 h-12 rounded-xl bg-cyber-emerald/10 border border-cyber-emerald/40 flex items-center justify-center text-cyber-emerald shadow-lg shadow-cyber-emerald/20">
+            <div id="theme-toggle-logo-reg" class="w-12 h-12 rounded-xl bg-cyber-emerald/10 border border-cyber-emerald/40 flex items-center justify-center text-cyber-emerald shadow-lg shadow-cyber-emerald/20 cursor-pointer hover:scale-105 transition-all" title="Click to toggle Dark/White Mode">
               <span class="material-symbols-outlined text-[28px]">bolt</span>
             </div>
             <div>
@@ -66,7 +66,7 @@ export function Register() {
       <section class="flex-1 flex flex-col justify-center items-center p-grid-margin relative py-xl">
         <!-- Mobile Header -->
         <div class="lg:hidden flex flex-col items-center mb-lg text-center">
-          <div class="w-12 h-12 rounded-xl bg-cyber-emerald/10 border border-cyber-emerald/40 flex items-center justify-center text-cyber-emerald mb-xs">
+          <div id="theme-toggle-logo-reg-mob" class="w-12 h-12 rounded-xl bg-cyber-emerald/10 border border-cyber-emerald/40 flex items-center justify-center text-cyber-emerald mb-xs cursor-pointer hover:scale-105 transition-all" title="Click to toggle Dark/White Mode">
             <span class="material-symbols-outlined text-[28px]">bolt</span>
           </div>
           <h1 class="font-bold text-2xl text-on-surface">
@@ -513,6 +513,16 @@ export function bindRegisterEvents() {
   const gotoLogin = document.getElementById('goto-login-btn');
   if (gotoLogin) {
     gotoLogin.addEventListener('click', () => store.setPage('login'));
+  }
+
+  const logoDesktop = document.getElementById('theme-toggle-logo-reg');
+  if (logoDesktop) {
+    logoDesktop.addEventListener('click', () => store.toggleTheme());
+  }
+
+  const logoMobile = document.getElementById('theme-toggle-logo-reg-mob');
+  if (logoMobile) {
+    logoMobile.addEventListener('click', () => store.toggleTheme());
   }
 }
 

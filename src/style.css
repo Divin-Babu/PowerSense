@@ -14,17 +14,31 @@
   --color-primary-light: #E8FBF4;
   --color-bg: #EDF5F1;
   --color-card: #FFFFFF;
+  --color-card-sub: #F8FAF9;
   --color-text: #111827;
   --color-text-secondary: #64748B;
   --color-border: #DCE8E2;
 }
 
+html.dark, body.dark {
+  --color-primary: #00C48C;
+  --color-primary-dark: #009668;
+  --color-primary-light: #0B291E;
+  --color-bg: #0B0F14;
+  --color-card: #141B24;
+  --color-card-sub: #0F1620;
+  --color-text: #F8FAFC;
+  --color-text-secondary: #94A3B8;
+  --color-border: #222C3A;
+}
+
 /* Base Body Background */
 body {
-  background-color: #EDF5F1;
-  color: #111827;
+  background-color: var(--color-bg);
+  color: var(--color-text);
   font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif;
   overflow-x: hidden;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 #app, #root {
@@ -34,16 +48,28 @@ body {
 }
 
 /* Pristine Cards & Glass */
-.clean-card {
-  background: #FFFFFF;
+.clean-card, .glass-card {
+  background: var(--color-card);
   border-radius: 1.5rem;
-  border: 1px solid #E5E9E7;
+  border: 1px solid var(--color-border);
   box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03);
-  transition: all 0.2s ease;
+  transition: all 0.25s ease;
 }
 
-.clean-card:hover {
+.clean-card:hover, .glass-card:hover {
   box-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.06);
+}
+
+.dark .clean-card, .dark .glass-card {
+  background: #141B24;
+  border-color: #222C3A;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
+}
+
+.dark input, .dark select, .dark textarea {
+  background-color: #0F1620 !important;
+  border-color: #243040 !important;
+  color: #F8FAFC !important;
 }
 
 .emerald-gradient-card {
@@ -71,9 +97,15 @@ body {
 ::-webkit-scrollbar-track {
   background: #F1F5F9;
 }
+.dark ::-webkit-scrollbar-track {
+  background: #0B0F14;
+}
 ::-webkit-scrollbar-thumb {
   background: #CBD5E1;
   border-radius: 3px;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #243040;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #94A3B8;

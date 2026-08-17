@@ -5,12 +5,13 @@ import { store } from '../state/store.js';
 export function Header() {
   const state = store.getState();
   const isAnomaly = state.simulatedAnomalyActive;
+  const isDark = state.theme === 'dark';
   const user = state.user || { name: 'User', email: 'user@powersense.ai', role: 'user' };
   const isAdmin = user.role === 'admin';
 
   return `
-    <header class="w-full top-0 sticky z-40 bg-surface dark:bg-surface border-b border-outline-variant dark:border-outline-variant flex justify-between items-center px-grid-margin py-md backdrop-blur-md bg-opacity-90">
-      <div class="flex items-center gap-sm cursor-pointer" id="header-logo">
+    <header class="w-full top-0 sticky z-40 bg-surface dark:bg-[#10161F] border-b border-outline-variant dark:border-[#1E2734] flex justify-between items-center px-grid-margin py-md backdrop-blur-md bg-opacity-90">
+      <div class="flex items-center gap-sm cursor-pointer" id="header-logo" title="PowerSense AI">
         <span class="material-symbols-outlined text-primary text-headline-md" style="font-variation-settings: 'FILL' 1;">bolt</span>
         <div>
           <h1 class="text-headline-md font-headline-md font-bold text-primary dark:text-primary tracking-tight">PowerSense AI</h1>
@@ -18,8 +19,15 @@ export function Header() {
       </div>
 
       <div class="flex items-center gap-sm md:gap-md">
+        <!-- Theme Mode Toggle Button -->
+        <button id="btn-header-theme-toggle" class="p-2 rounded-xl bg-surface-container-high dark:bg-[#1A2330] hover:bg-surface-variant dark:hover:bg-[#253243] border border-outline-variant dark:border-[#253243] text-on-surface transition-all flex items-center justify-center" title="Toggle Dark/White Mode (${isDark ? 'Currently Dark' : 'Currently White'})">
+          <span class="material-symbols-outlined text-[20px] ${isDark ? 'text-amber-400' : 'text-slate-600'}">
+            ${isDark ? 'light_mode' : 'dark_mode'}
+          </span>
+        </button>
+
         <!-- User Session Indicator -->
-        <div id="header-user-badge" class="flex items-center gap-xs px-sm py-1 rounded-xl bg-surface-container-high border border-outline-variant cursor-pointer hover:border-cyber-cyan transition-all" title="Logged in as ${user.email}">
+        <div id="header-user-badge" class="flex items-center gap-xs px-sm py-1 rounded-xl bg-surface-container-high dark:bg-[#1A2330] border border-outline-variant dark:border-[#253243] cursor-pointer hover:border-cyber-cyan transition-all" title="Logged in as ${user.email}">
           <div class="w-6 h-6 rounded-lg ${isAdmin ? 'bg-cyber-emerald/20 text-cyber-emerald border border-cyber-emerald/40' : 'bg-cyber-cyan/20 text-cyber-cyan border border-cyber-cyan/40'} flex items-center justify-center font-mono text-[11px] font-bold">
             ${(user.name || user.email || 'U').charAt(0).toUpperCase()}
           </div>
@@ -30,7 +38,7 @@ export function Header() {
         </div>
 
         <!-- IoT Simulator Control Toggle -->
-        <button id="btn-open-simulator" class="hidden sm:flex items-center gap-xs px-md py-xs rounded-lg bg-surface-container-high hover:bg-surface-variant border border-outline-variant text-label-sm font-label-sm text-on-surface transition-all">
+        <button id="btn-open-simulator" class="hidden sm:flex items-center gap-xs px-md py-xs rounded-lg bg-surface-container-high dark:bg-[#1A2330] hover:bg-surface-variant border border-outline-variant dark:border-[#253243] text-label-sm font-label-sm text-on-surface transition-all">
           <span class="material-symbols-outlined text-secondary text-[18px]">developer_board</span>
           <span>IoT Control</span>
         </button>
@@ -42,7 +50,7 @@ export function Header() {
         </button>
 
         <!-- Connection Status Chip -->
-        <div class="flex items-center gap-sm px-md py-xs rounded-full bg-surface-container-high border ${isAnomaly ? 'border-error/50 bg-error-container/10' : 'border-outline-variant'} transition-colors">
+        <div class="flex items-center gap-sm px-md py-xs rounded-full bg-surface-container-high dark:bg-[#1A2330] border ${isAnomaly ? 'border-error/50 bg-error-container/10' : 'border-outline-variant dark:border-[#253243]'} transition-colors">
           <div class="${isAnomaly ? 'w-2 h-2 rounded-full bg-error animate-ping' : 'w-2 h-2 rounded-full bg-secondary pulse-dot'}"></div>
           <span class="font-label-sm text-label-sm ${isAnomaly ? 'text-error' : 'text-on-surface-variant'} uppercase tracking-wider hidden sm:inline">
             ${isAnomaly ? 'Surge Alert' : 'Connected'}
@@ -68,6 +76,13 @@ export function bindHeaderEvents() {
     });
   }
 
+  const btnThemeToggle = document.getElementById('btn-header-theme-toggle');
+  if (btnThemeToggle) {
+    btnThemeToggle.addEventListener('click', () => {
+      store.toggleTheme();
+    });
+  }
+
   const userBadge = document.getElementById('header-user-badge');
   if (userBadge) {
     userBadge.addEventListener('click', () => store.setPage('profile'));
@@ -90,4 +105,3 @@ export function bindHeaderEvents() {
     btnRag.addEventListener('click', () => store.toggleRagModal(true));
   }
 }
-

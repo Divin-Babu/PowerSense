@@ -19,7 +19,6 @@ import Svg, {
   Circle,
   G,
 } from 'react-native-svg';
-import { colors } from '../../src/theme/colors';
 import { useStore } from '../../src/store/StoreContext';
 import { fetchAnalyticsData } from '../../src/services/api';
 
@@ -44,7 +43,7 @@ const DEFAULT_TOP_APPLIANCES = [
 
 export default function AnalyticsScreen() {
   const router = useRouter();
-  const { state } = useStore();
+  const { state, isDark, themeColors } = useStore();
 
   const [activeFilter, setActiveFilter] = useState<FilterType>('day');
   const [totalKwh, setTotalKwh] = useState('2.45');
@@ -96,7 +95,7 @@ export default function AnalyticsScreen() {
   `;
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]} edges={['top']}>
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
@@ -104,22 +103,28 @@ export default function AnalyticsScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Analytics</Text>
+          <Text style={[styles.headerTitle, { color: themeColors.text }]}>Analytics & History</Text>
         </View>
 
         {/* Date Selector Row */}
         <View style={styles.dateSelectorRow}>
-          <TouchableOpacity style={styles.dateArrowBtn} activeOpacity={0.7}>
-            <Ionicons name="chevron-back" size={20} color="#111827" />
+          <TouchableOpacity
+            style={[styles.dateArrowBtn, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="chevron-back" size={20} color={themeColors.text} />
           </TouchableOpacity>
-          <Text style={styles.dateText}>{dateDisplay}</Text>
-          <TouchableOpacity style={styles.dateArrowBtn} activeOpacity={0.7}>
-            <Ionicons name="chevron-forward" size={20} color="#111827" />
+          <Text style={[styles.dateText, { color: themeColors.text }]}>{dateDisplay}</Text>
+          <TouchableOpacity
+            style={[styles.dateArrowBtn, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="chevron-forward" size={20} color={themeColors.text} />
           </TouchableOpacity>
         </View>
 
         {/* Time Filters: Day | Week | Month | Year */}
-        <View style={styles.filtersWrapper}>
+        <View style={[styles.filtersWrapper, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
           {(['day', 'week', 'month', 'year'] as FilterType[]).map((filter) => {
             const isSelected = activeFilter === filter;
             return (
@@ -129,7 +134,13 @@ export default function AnalyticsScreen() {
                 onPress={() => setActiveFilter(filter)}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.filterText, isSelected && styles.filterTextActive]}>
+                <Text
+                  style={[
+                    styles.filterText,
+                    { color: isSelected ? '#FFFFFF' : themeColors.textSecondary },
+                    isSelected && styles.filterTextActive,
+                  ]}
+                >
                   {filter.charAt(0).toUpperCase() + filter.slice(1)}
                 </Text>
               </TouchableOpacity>
@@ -138,11 +149,11 @@ export default function AnalyticsScreen() {
         </View>
 
         {/* Total Usage Card with Spline Wave Chart */}
-        <View style={styles.card}>
-          <Text style={styles.cardSectionTitle}>Total Usage</Text>
+        <View style={[styles.card, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
+          <Text style={[styles.cardSectionTitle, { color: themeColors.textSecondary }]}>Total Usage</Text>
           <View style={styles.totalRow}>
-            <Text style={styles.totalKwh}>{totalKwh}</Text>
-            <Text style={styles.totalUnit}>kWh</Text>
+            <Text style={[styles.totalKwh, { color: themeColors.text }]}>{totalKwh}</Text>
+            <Text style={[styles.totalUnit, { color: themeColors.textSecondary }]}>kWh</Text>
           </View>
 
           {/* SVG Wave Chart Container */}
@@ -162,28 +173,28 @@ export default function AnalyticsScreen() {
               <Path d={linePath} fill="none" stroke="#00C48C" strokeWidth="3" strokeLinecap="round" />
 
               {/* Peak Tooltip Point at 13:00 (1.32 kWh) */}
-              <Circle cx="170" cy="30" r="5" fill="#00C48C" stroke="#FFFFFF" strokeWidth="3" />
+              <Circle cx="170" cy="30" r="5" fill="#00C48C" stroke={isDark ? '#141B24' : '#FFFFFF'} strokeWidth="3" />
             </Svg>
 
             {/* Peak Tooltip Bubble */}
-            <View style={styles.peakTooltip}>
+            <View style={[styles.peakTooltip, { backgroundColor: isDark ? '#1F2937' : '#111827' }]}>
               <Text style={styles.peakTooltipText}>1.32 kWh  1:00 PM</Text>
             </View>
 
             {/* X-Axis Horizontal Grid Labels */}
             <View style={styles.chartXLabels}>
-              <Text style={styles.xLabel}>00:00</Text>
-              <Text style={styles.xLabel}>06:00</Text>
-              <Text style={styles.xLabel}>12:00</Text>
-              <Text style={styles.xLabel}>18:00</Text>
-              <Text style={styles.xLabel}>24:00</Text>
+              <Text style={[styles.xLabel, { color: themeColors.textMuted }]}>00:00</Text>
+              <Text style={[styles.xLabel, { color: themeColors.textMuted }]}>06:00</Text>
+              <Text style={[styles.xLabel, { color: themeColors.textMuted }]}>12:00</Text>
+              <Text style={[styles.xLabel, { color: themeColors.textMuted }]}>18:00</Text>
+              <Text style={[styles.xLabel, { color: themeColors.textMuted }]}>24:00</Text>
             </View>
           </View>
         </View>
 
         {/* Usage Breakdown Card (Donut Chart & Legend) */}
-        <View style={styles.card}>
-          <Text style={styles.cardSectionTitle}>Usage Breakdown</Text>
+        <View style={[styles.card, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
+          <Text style={[styles.cardSectionTitle, { color: themeColors.textSecondary }]}>Usage Breakdown</Text>
 
           <View style={styles.donutRow}>
             {/* Donut Chart SVG */}
@@ -231,7 +242,7 @@ export default function AnalyticsScreen() {
                     cx="60"
                     cy="60"
                     r="45"
-                    stroke="#CBD5E1"
+                    stroke={isDark ? '#232D3B' : '#CBD5E1'}
                     strokeWidth="16"
                     fill="none"
                     strokeDasharray="282.7"
@@ -243,8 +254,8 @@ export default function AnalyticsScreen() {
 
               {/* Center Donut Label */}
               <View style={styles.donutCenter}>
-                <Text style={styles.donutCenterText}>{totalKwh}</Text>
-                <Text style={styles.donutUnit}>kWh</Text>
+                <Text style={[styles.donutCenterText, { color: themeColors.text }]}>{totalKwh}</Text>
+                <Text style={[styles.donutUnit, { color: themeColors.textSecondary }]}>kWh</Text>
               </View>
             </View>
 
@@ -253,8 +264,8 @@ export default function AnalyticsScreen() {
               {breakdownData.map((item) => (
                 <View key={item.label} style={styles.legendRow}>
                   <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-                  <Text style={styles.legendLabel}>{item.label}</Text>
-                  <Text style={styles.legendPct}>{item.pct}%</Text>
+                  <Text style={[styles.legendLabel, { color: themeColors.text }]}>{item.label}</Text>
+                  <Text style={[styles.legendPct, { color: themeColors.text }]}>{item.pct}%</Text>
                 </View>
               ))}
             </View>
@@ -262,24 +273,32 @@ export default function AnalyticsScreen() {
         </View>
 
         {/* Top Appliances Ranked List */}
-        <View style={styles.card}>
-          <Text style={styles.cardSectionTitle}>Smart Plug Load Breakdown</Text>
+        <View style={[styles.card, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
+          <Text style={[styles.cardSectionTitle, { color: themeColors.textSecondary }]}>Smart Plug Load Breakdown</Text>
 
           <View style={styles.appliancesList}>
             {topAppliances.map((app) => (
               <View key={app.id} style={styles.applianceItem}>
-                <View style={[styles.applianceIconBox, { backgroundColor: '#F8FAF9' }]}>
+                <View
+                  style={[
+                    styles.applianceIconBox,
+                    {
+                      backgroundColor: themeColors.subCardBg,
+                      borderColor: themeColors.subCardBorder,
+                    },
+                  ]}
+                >
                   <Ionicons name={app.icon as any} size={20} color={app.iconColor} />
                 </View>
 
                 <View style={styles.applianceInfo}>
                   <View style={styles.applianceTitleRow}>
-                    <Text style={styles.applianceName}>{app.name}</Text>
-                    <Text style={styles.applianceKwh}>{app.kwh}</Text>
+                    <Text style={[styles.applianceName, { color: themeColors.text }]}>{app.name}</Text>
+                    <Text style={[styles.applianceKwh, { color: themeColors.textSecondary }]}>{app.kwh}</Text>
                   </View>
 
                   {/* Progress Bar */}
-                  <View style={styles.progressTrack}>
+                  <View style={[styles.progressTrack, { backgroundColor: isDark ? '#1F2937' : '#F1F5F3' }]}>
                     <View
                       style={[
                         styles.progressFill,
@@ -305,7 +324,6 @@ export default function AnalyticsScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#EDF5F1',
   },
   container: {
     flex: 1,
@@ -323,7 +341,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
   },
 
   // Date Selector
@@ -338,27 +355,22 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E5E9E7',
   },
   dateText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#111827',
   },
 
   // Filters
   filtersWrapper: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 4,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E5E9E7',
   },
   filterPill: {
     flex: 1,
@@ -373,7 +385,6 @@ const styles = StyleSheet.create({
   filterText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#64748B',
   },
   filterTextActive: {
     color: '#FFFFFF',
@@ -382,22 +393,15 @@ const styles = StyleSheet.create({
 
   // Card
   card: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 20,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 12,
     elevation: 2,
     borderWidth: 1,
-    borderColor: '#E5E9E7',
   },
   cardSectionTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#64748B',
     marginBottom: 6,
   },
   totalRow: {
@@ -409,12 +413,10 @@ const styles = StyleSheet.create({
   totalKwh: {
     fontSize: 30,
     fontWeight: '800',
-    color: '#111827',
   },
   totalUnit: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#64748B',
   },
 
   // Wave Chart
@@ -427,7 +429,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 4,
     left: 105,
-    backgroundColor: '#111827',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
@@ -446,7 +447,6 @@ const styles = StyleSheet.create({
   },
   xLabel: {
     fontSize: 11,
-    color: '#94A3B8',
     fontWeight: '500',
   },
 
@@ -472,12 +472,10 @@ const styles = StyleSheet.create({
   donutCenterText: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#111827',
   },
   donutUnit: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#64748B',
   },
   legendCol: {
     gap: 8,
@@ -494,14 +492,12 @@ const styles = StyleSheet.create({
   },
   legendLabel: {
     fontSize: 13,
-    color: '#111827',
     fontWeight: '500',
     width: 80,
   },
   legendPct: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#111827',
   },
 
   // Top Appliances
@@ -521,7 +517,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E5E9E7',
   },
   applianceInfo: {
     flex: 1,
@@ -534,17 +529,14 @@ const styles = StyleSheet.create({
   applianceName: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#111827',
   },
   applianceKwh: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#64748B',
   },
   progressTrack: {
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#F1F5F3',
     overflow: 'hidden',
   },
   progressFill: {

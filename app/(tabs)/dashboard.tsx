@@ -14,7 +14,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Circle, Rect, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
-import { colors } from '../../src/theme/colors';
 import { useStore } from '../../src/store/StoreContext';
 import { fetchDashboardData } from '../../src/services/api';
 
@@ -36,7 +35,7 @@ const DEFAULT_HOURLY_BARS = [
 
 export default function DashboardScreen() {
   const router = useRouter();
-  const { state, togglePlugRelay, logout } = useStore();
+  const { state, togglePlugRelay, logout, isDark, themeColors, toggleTheme } = useStore();
 
   const [hourlyBars, setHourlyBars] = useState(DEFAULT_HOURLY_BARS);
   const [selectedBar, setSelectedBar] = useState<number | null>(7);
@@ -85,7 +84,7 @@ export default function DashboardScreen() {
   const displayKwh = telemetry.cumulativeKwh > 0 ? telemetry.cumulativeKwh.toFixed(2) : '2.45';
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]} edges={['top']}>
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
@@ -94,27 +93,72 @@ export default function DashboardScreen() {
         {/* Top Header */}
         <View style={styles.header}>
           <View style={styles.brandRow}>
-            <View style={styles.logoBadge}>
+            <TouchableOpacity
+              onPress={toggleTheme}
+              activeOpacity={0.75}
+              style={[
+                styles.logoBadge,
+                {
+                  backgroundColor: themeColors.logoBadgeBg,
+                  borderColor: themeColors.logoBadgeBorder,
+                },
+              ]}
+              accessibilityLabel="Toggle Theme Mode"
+            >
               <Ionicons name="flash" size={24} color="#00C48C" />
-            </View>
+              <View style={[styles.headerModeDot, { backgroundColor: isDark ? '#38BDF8' : '#F59E0B' }]} />
+            </TouchableOpacity>
             <View>
-              <Text style={styles.brandTitle}>PowerSense</Text>
-              <Text style={styles.brandSubtitle}>Smart Energy, Smarter You</Text>
+              <Text style={[styles.brandTitle, { color: themeColors.text }]}>
+                Power<Text style={{ color: '#00C48C' }}>Sense</Text>
+              </Text>
+              <Text style={[styles.brandSubtitle, { color: themeColors.textSecondary }]}>Smart Energy, Smarter You</Text>
             </View>
           </View>
 
           <View style={styles.headerActions}>
             <TouchableOpacity
-              style={styles.bellBtn}
+              style={[
+                styles.themeHeaderBtn,
+                {
+                  backgroundColor: themeColors.card,
+                  borderColor: themeColors.cardBorder,
+                },
+              ]}
+              onPress={toggleTheme}
+              activeOpacity={0.7}
+              accessibilityLabel={`Switch to ${isDark ? 'White' : 'Dark'} Mode`}
+            >
+              <Ionicons
+                name={isDark ? 'sunny' : 'moon'}
+                size={20}
+                color={isDark ? '#FBBF24' : '#64748B'}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.bellBtn,
+                {
+                  backgroundColor: themeColors.card,
+                  borderColor: themeColors.cardBorder,
+                },
+              ]}
               onPress={() => router.push('/(tabs)/alerts')}
               activeOpacity={0.7}
             >
-              <Ionicons name="notifications-outline" size={22} color="#111827" />
+              <Ionicons name="notifications-outline" size={22} color={themeColors.text} />
               {alertCount > 0 && <View style={styles.bellDot} />}
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.logoutBtn}
+              style={[
+                styles.logoutBtn,
+                {
+                  backgroundColor: themeColors.card,
+                  borderColor: 'rgba(239, 68, 68, 0.3)',
+                },
+              ]}
               onPress={() => {
                 logout();
                 router.replace('/login');
@@ -178,52 +222,86 @@ export default function DashboardScreen() {
         {/* Quick Action Buttons (3 Cards Row) */}
         <View style={styles.actionRow}>
           <TouchableOpacity
-            style={styles.actionCard}
+            style={[
+              styles.actionCard,
+              {
+                backgroundColor: themeColors.card,
+                borderColor: themeColors.cardBorder,
+              },
+            ]}
             onPress={togglePlugRelay}
             activeOpacity={0.7}
           >
-            <View style={[styles.actionIconCircle, { borderColor: isRelayOn ? '#00C48C' : '#CBD5E1' }]}>
+            <View
+              style={[
+                styles.actionIconCircle,
+                {
+                  backgroundColor: themeColors.subCardBg,
+                  borderColor: isRelayOn ? '#00C48C' : themeColors.subCardBorder,
+                },
+              ]}
+            >
               <Ionicons
                 name="power"
                 size={22}
-                color={isRelayOn ? '#00C48C' : '#94A3B8'}
+                color={isRelayOn ? '#00C48C' : themeColors.textMuted}
               />
             </View>
-            <Text style={styles.actionText}>{isRelayOn ? 'On / Off' : 'Turn On'}</Text>
+            <Text style={[styles.actionText, { color: themeColors.text }]}>{isRelayOn ? 'On / Off' : 'Turn On'}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.actionCard}
+            style={[
+              styles.actionCard,
+              {
+                backgroundColor: themeColors.card,
+                borderColor: themeColors.cardBorder,
+              },
+            ]}
             onPress={() => setActiveModal('schedule')}
             activeOpacity={0.7}
           >
-            <View style={styles.actionIconCircle}>
+            <View style={[styles.actionIconCircle, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder }]}>
               <Ionicons name="time-outline" size={22} color="#00C48C" />
             </View>
-            <Text style={styles.actionText}>Schedule</Text>
+            <Text style={[styles.actionText, { color: themeColors.text }]}>Schedule</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.actionCard}
+            style={[
+              styles.actionCard,
+              {
+                backgroundColor: themeColors.card,
+                borderColor: themeColors.cardBorder,
+              },
+            ]}
             onPress={() => setActiveModal('timer')}
             activeOpacity={0.7}
           >
-            <View style={styles.actionIconCircle}>
+            <View style={[styles.actionIconCircle, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder }]}>
               <Ionicons name="stopwatch-outline" size={22} color="#00C48C" />
             </View>
-            <Text style={styles.actionText}>Timer</Text>
+            <Text style={[styles.actionText, { color: themeColors.text }]}>Timer</Text>
           </TouchableOpacity>
         </View>
 
         {/* Today's Usage Card */}
-        <View style={styles.card}>
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: themeColors.card,
+              borderColor: themeColors.cardBorder,
+            },
+          ]}
+        >
           <View style={styles.cardHeader}>
             <View>
-              <Text style={styles.cardTitle}>Today's Usage</Text>
+              <Text style={[styles.cardTitle, { color: themeColors.textSecondary }]}>Today's Usage</Text>
               <View style={styles.kwhHeaderRow}>
-                <Text style={styles.kwhValue}>{displayKwh}</Text>
-                <Text style={styles.kwhUnit}>kWh</Text>
-                <View style={styles.decreasePill}>
+                <Text style={[styles.kwhValue, { color: themeColors.text }]}>{displayKwh}</Text>
+                <Text style={[styles.kwhUnit, { color: themeColors.textSecondary }]}>kWh</Text>
+                <View style={[styles.decreasePill, { backgroundColor: isDark ? 'rgba(0, 196, 140, 0.15)' : '#E8FBF4' }]}>
                   <Text style={styles.decreaseText}>▼ 12% vs yesterday</Text>
                 </View>
               </View>
@@ -232,7 +310,7 @@ export default function DashboardScreen() {
 
           {/* Bar Chart Tooltip */}
           {selectedBar !== null && hourlyBars[selectedBar] && (
-            <View style={styles.tooltipBox}>
+            <View style={[styles.tooltipBox, { backgroundColor: isDark ? '#1F2937' : '#111827' }]}>
               <Text style={styles.tooltipText}>
                 {hourlyBars[selectedBar].val.toFixed(2)} kWh • {hourlyBars[selectedBar].time}
               </Text>
@@ -254,13 +332,13 @@ export default function DashboardScreen() {
                     onPress={() => setSelectedBar(idx)}
                     activeOpacity={0.8}
                   >
-                    <View style={styles.barTrack}>
+                    <View style={[styles.barTrack, { backgroundColor: isDark ? '#1F2937' : '#E8F3ED' }]}>
                       <View
                         style={[
                           styles.barFill,
                           {
                             height: `${heightPct}%`,
-                            backgroundColor: isSelected ? '#00C48C' : '#A7F3D0',
+                            backgroundColor: isSelected ? '#00C48C' : isDark ? '#105B44' : '#A7F3D0',
                           },
                         ]}
                       />
@@ -272,11 +350,11 @@ export default function DashboardScreen() {
 
             {/* X-Axis Labels */}
             <View style={styles.xAxisRow}>
-              <Text style={styles.xAxisLabel}>00:00</Text>
-              <Text style={styles.xAxisLabel}>06:00</Text>
-              <Text style={styles.xAxisLabel}>12:00</Text>
-              <Text style={styles.xAxisLabel}>18:00</Text>
-              <Text style={styles.xAxisLabel}>24:00</Text>
+              <Text style={[styles.xAxisLabel, { color: themeColors.textMuted }]}>00:00</Text>
+              <Text style={[styles.xAxisLabel, { color: themeColors.textMuted }]}>06:00</Text>
+              <Text style={[styles.xAxisLabel, { color: themeColors.textMuted }]}>12:00</Text>
+              <Text style={[styles.xAxisLabel, { color: themeColors.textMuted }]}>18:00</Text>
+              <Text style={[styles.xAxisLabel, { color: themeColors.textMuted }]}>24:00</Text>
             </View>
           </View>
         </View>
@@ -284,9 +362,11 @@ export default function DashboardScreen() {
         {/* Row with 2 Cards: This Month & Estimated Bill */}
         <View style={styles.twoCardsRow}>
           {/* This Month Goal Card */}
-          <View style={styles.halfCard}>
-            <Text style={styles.halfCardLabel}>This Month</Text>
-            <Text style={styles.halfCardValue}>{monthKwh} <Text style={styles.halfCardUnit}>kWh</Text></Text>
+          <View style={[styles.halfCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
+            <Text style={[styles.halfCardLabel, { color: themeColors.textSecondary }]}>This Month</Text>
+            <Text style={[styles.halfCardValue, { color: themeColors.text }]}>
+              {monthKwh} <Text style={[styles.halfCardUnit, { color: themeColors.textSecondary }]}>kWh</Text>
+            </Text>
 
             {/* Circular Gauge Visual */}
             <View style={styles.gaugeWrapper}>
@@ -294,7 +374,7 @@ export default function DashboardScreen() {
                 <Path
                   d="M 15 55 A 40 40 0 0 1 95 55"
                   fill="none"
-                  stroke="#E2E8F0"
+                  stroke={isDark ? '#232D3B' : '#E2E8F0'}
                   strokeWidth="8"
                   strokeLinecap="round"
                 />
@@ -311,19 +391,19 @@ export default function DashboardScreen() {
               </View>
             </View>
 
-            <Text style={styles.gaugeFooterText}>
+            <Text style={[styles.gaugeFooterText, { color: themeColors.textSecondary }]}>
               <Text style={{ fontWeight: '700', color: '#00C48C' }}>{monthGoalPct}</Text> of 100 kWh goal
             </Text>
           </View>
 
           {/* Estimated Bill Card */}
-          <View style={styles.halfCard}>
-            <Text style={styles.halfCardLabel}>Estimated Bill</Text>
-            <Text style={styles.halfCardValue}>₹ {billAmount}</Text>
-            <Text style={styles.billDueText}>Due on 1 Jun 2025</Text>
+          <View style={[styles.halfCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
+            <Text style={[styles.halfCardLabel, { color: themeColors.textSecondary }]}>Estimated Bill</Text>
+            <Text style={[styles.halfCardValue, { color: themeColors.text }]}>₹ {billAmount}</Text>
+            <Text style={[styles.billDueText, { color: themeColors.textMuted }]}>Due on 1 Jun 2025</Text>
 
             <View style={styles.billIconContainer}>
-              <View style={styles.billIconBadge}>
+              <View style={[styles.billIconBadge, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder }]}>
                 <Ionicons name="document-text-outline" size={32} color="#00C48C" />
                 <View style={styles.shieldBadge}>
                   <Ionicons name="checkmark-circle" size={14} color="#00C48C" />
@@ -335,24 +415,24 @@ export default function DashboardScreen() {
 
         {/* Quick Insights Banner */}
         <TouchableOpacity
-          style={styles.insightBanner}
+          style={[styles.insightBanner, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}
           onPress={() => router.push('/(tabs)/rag')}
           activeOpacity={0.8}
         >
-          <View style={styles.leafIconBadge}>
+          <View style={[styles.leafIconBadge, { backgroundColor: isDark ? 'rgba(0, 196, 140, 0.15)' : '#E8FBF4' }]}>
             <Ionicons name="leaf" size={20} color="#00C48C" />
           </View>
-          <Text style={styles.insightText}>
+          <Text style={[styles.insightText, { color: themeColors.text }]}>
             Great! You are using 15% less energy than last month.
           </Text>
-          <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+          <Ionicons name="chevron-forward" size={18} color={themeColors.textMuted} />
         </TouchableOpacity>
 
         {/* Hardware Status Strip */}
-        <View style={styles.hardwareStrip}>
+        <View style={[styles.hardwareStrip, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
           <View style={styles.hardwareLeft}>
             <View style={[styles.statusDot, { backgroundColor: isRelayOn ? '#10B981' : '#F59E0B' }]} />
-            <Text style={styles.hardwareText}>
+            <Text style={[styles.hardwareText, { color: themeColors.textSecondary }]}>
               ESP32 PZEM-004T Node • {singlePlug.relayState === 'ON' ? 'Relay Active' : 'Relay Idle'}
             </Text>
           </View>
@@ -370,7 +450,6 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#EDF5F1',
   },
   container: {
     flex: 1,
@@ -396,41 +475,51 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: '#E8FBF4',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    position: 'relative',
+  },
+  headerModeDot: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   brandTitle: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#111827',
     letterSpacing: 0.3,
   },
   brandSubtitle: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#64748B',
     marginTop: 1,
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+  },
+  themeHeaderBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    elevation: 2,
   },
   bellBtn: {
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8,
     elevation: 2,
     borderWidth: 1,
-    borderColor: '#E5E9E7',
   },
   bellDot: {
     position: 'absolute',
@@ -445,16 +534,10 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8,
     elevation: 2,
     borderWidth: 1,
-    borderColor: '#FEE2E2',
   },
 
   // Hero Card
@@ -541,108 +624,34 @@ const styles = StyleSheet.create({
   },
   actionCard: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 10,
     elevation: 2,
     borderWidth: 1,
-    borderColor: '#E5E9E7',
     gap: 8,
   },
   actionIconCircle: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#F8FAF9',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E5E9E7',
   },
   actionText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#111827',
-  },
-
-  // BLE Banner Card
-  bleBannerCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 10,
-    elevation: 2,
-    borderWidth: 1.5,
-    borderColor: '#A7F3D0',
-  },
-  bleBannerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  bleBannerIconBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    backgroundColor: '#E8FBF4',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bleBannerTextCol: {
-    flex: 1,
-  },
-  bleBannerTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  bleBannerSub: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  bleBannerActionPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#00C48C',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-  },
-  bleBannerActionText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FFFFFF',
   },
 
   // Today's Usage Card
   card: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 20,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 12,
     elevation: 2,
     borderWidth: 1,
-    borderColor: '#E5E9E7',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -653,7 +662,6 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#64748B',
   },
   kwhHeaderRow: {
     flexDirection: 'row',
@@ -664,16 +672,13 @@ const styles = StyleSheet.create({
   kwhValue: {
     fontSize: 26,
     fontWeight: '800',
-    color: '#111827',
   },
   kwhUnit: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#64748B',
     marginRight: 8,
   },
   decreasePill: {
-    backgroundColor: '#E8FBF4',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 12,
@@ -685,7 +690,6 @@ const styles = StyleSheet.create({
   },
   tooltipBox: {
     alignSelf: 'center',
-    backgroundColor: '#111827',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
@@ -734,7 +738,6 @@ const styles = StyleSheet.create({
   },
   xAxisLabel: {
     fontSize: 11,
-    color: '#94A3B8',
     fontWeight: '500',
   },
 
@@ -746,33 +749,24 @@ const styles = StyleSheet.create({
   },
   halfCard: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
     borderRadius: 22,
     padding: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 10,
     elevation: 2,
     borderWidth: 1,
-    borderColor: '#E5E9E7',
     justifyContent: 'space-between',
   },
   halfCardLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#64748B',
   },
   halfCardValue: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#111827',
     marginTop: 2,
   },
   halfCardUnit: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#64748B',
   },
   gaugeWrapper: {
     alignItems: 'center',
@@ -786,12 +780,10 @@ const styles = StyleSheet.create({
   },
   gaugeFooterText: {
     fontSize: 11,
-    color: '#64748B',
     textAlign: 'center',
   },
   billDueText: {
     fontSize: 11,
-    color: '#94A3B8',
     marginTop: 2,
   },
   billIconContainer: {
@@ -804,11 +796,9 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 16,
-    backgroundColor: '#F8FAF9',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E5E9E7',
   },
   shieldBadge: {
     position: 'absolute',
@@ -820,24 +810,17 @@ const styles = StyleSheet.create({
   insightBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 16,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 10,
     elevation: 2,
     borderWidth: 1,
-    borderColor: '#E5E9E7',
     gap: 12,
   },
   leafIconBadge: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: '#E8FBF4',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -845,7 +828,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     fontWeight: '600',
-    color: '#111827',
     lineHeight: 18,
   },
 
@@ -854,12 +836,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: '#E5E9E7',
   },
   hardwareLeft: {
     flexDirection: 'row',
@@ -874,7 +854,6 @@ const styles = StyleSheet.create({
   hardwareText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#64748B',
   },
   hardwareLink: {
     fontSize: 12,

@@ -15,13 +15,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors } from '../src/theme/colors';
 import { useStore } from '../src/store/StoreContext';
 import { registerUser as registerApi, checkEmailAvailability, validateIndianPhone, validateEmailFormat } from '../src/services/api';
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const { registerUser } = useStore();
+  const { registerUser, isDark, themeColors, toggleTheme } = useStore();
 
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
@@ -35,7 +34,7 @@ export default function RegisterScreen() {
   const [emailLiveState, setEmailLiveState] = useState<{ isChecking: boolean; message: string; color: string; isValid: boolean | null }>({
     isChecking: false,
     message: '',
-    color: colors.textMuted,
+    color: themeColors.textMuted,
     isValid: null
   });
 
@@ -49,7 +48,7 @@ export default function RegisterScreen() {
   const isConfirmValid = Boolean(confirmPassword && confirmPassword === password);
 
   const handlePhoneChange = (text: string) => {
-    // Strictly numeric digits only: filter out any letters or special characters
+    // Strictly numeric digits only
     const numericOnly = text.replace(/[^0-9]/g, '').slice(0, 10);
     setPhone(numericOnly);
   };
@@ -58,27 +57,27 @@ export default function RegisterScreen() {
     setEmail(text);
     const clean = text.trim();
     if (!clean) {
-      setEmailLiveState({ isChecking: false, message: '', color: colors.textMuted, isValid: null });
+      setEmailLiveState({ isChecking: false, message: '', color: themeColors.textMuted, isValid: null });
       return;
     }
     const formatRes = validateEmailFormat(clean);
     if (!formatRes.isValid) {
-      setEmailLiveState({ isChecking: false, message: formatRes.message, color: colors.danger, isValid: false });
+      setEmailLiveState({ isChecking: false, message: formatRes.message, color: themeColors.danger, isValid: false });
       return;
     }
 
-    setEmailLiveState({ isChecking: true, message: 'Checking availability...', color: colors.primary, isValid: null });
+    setEmailLiveState({ isChecking: true, message: 'Checking availability...', color: themeColors.primary, isValid: null });
 
     const timer = setTimeout(async () => {
       try {
         const res: any = await checkEmailAvailability(clean);
         if (!res.available) {
-          setEmailLiveState({ isChecking: false, message: res.message || 'Email is already registered.', color: colors.danger, isValid: false });
+          setEmailLiveState({ isChecking: false, message: res.message || 'Email is already registered.', color: themeColors.danger, isValid: false });
         } else {
-          setEmailLiveState({ isChecking: false, message: '✓ Available', color: colors.primary, isValid: true });
+          setEmailLiveState({ isChecking: false, message: '✓ Available', color: themeColors.primary, isValid: true });
         }
       } catch (e) {
-        setEmailLiveState({ isChecking: false, message: '✓ Valid format', color: colors.primary, isValid: true });
+        setEmailLiveState({ isChecking: false, message: '✓ Valid format', color: themeColors.primary, isValid: true });
       }
     }, 400);
 
@@ -87,9 +86,9 @@ export default function RegisterScreen() {
 
   const getPasswordStrength = () => {
     if (!password) return { label: '', color: 'transparent', pct: '0%' };
-    if (password.length < 6) return { label: 'Weak', color: colors.danger, pct: '33%' };
-    if (password.length < 10) return { label: 'Medium', color: colors.warning, pct: '66%' };
-    return { label: 'Strong', color: colors.primary, pct: '100%' };
+    if (password.length < 6) return { label: 'Weak', color: themeColors.danger, pct: '33%' };
+    if (password.length < 10) return { label: 'Medium', color: themeColors.warning, pct: '66%' };
+    return { label: 'Strong', color: themeColors.primary, pct: '100%' };
   };
 
   const handleRegister = async () => {
@@ -146,7 +145,7 @@ export default function RegisterScreen() {
   const strength = getPasswordStrength();
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.container}
@@ -156,29 +155,70 @@ export default function RegisterScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Header & Logo */}
+          {/* Header & Interactive Theme Toggle Logo */}
           <View style={styles.headerSection}>
-            <View style={styles.logoBadge}>
+            <TouchableOpacity
+              onPress={toggleTheme}
+              activeOpacity={0.75}
+              style={[
+                styles.logoBadge,
+                {
+                  backgroundColor: themeColors.logoBadgeBg,
+                  borderColor: themeColors.logoBadgeBorder,
+                },
+              ]}
+              accessibilityLabel="Toggle Dark and White Mode"
+              accessibilityHint="Tap to switch between dark and light themes"
+            >
               <Ionicons name="flash" size={36} color="#00C48C" />
-            </View>
-            <Text style={styles.appTitle}>
+              <View
+                style={[
+                  styles.modeIndicatorBadge,
+                  {
+                    backgroundColor: isDark ? '#1F2937' : '#FFFFFF',
+                    borderColor: isDark ? '#374151' : '#E2E8F0',
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={isDark ? 'moon' : 'sunny'}
+                  size={12}
+                  color={isDark ? '#38BDF8' : '#F59E0B'}
+                />
+              </View>
+            </TouchableOpacity>
+
+            <Text style={[styles.appTitle, { color: themeColors.text }]}>
               Power<Text style={styles.appTitleHighlight}>Sense</Text>
             </Text>
-            <Text style={styles.appSubtitle}>
+            <Text style={[styles.appSubtitle, { color: themeColors.textSecondary }]}>
               Smart Energy, Smarter You
             </Text>
+            <TouchableOpacity onPress={toggleTheme} style={styles.themeHintBtn}>
+              <Text style={[styles.themeHintText, { color: themeColors.textMuted }]}>
+                Tap ⚡ for {isDark ? 'White Mode ☀️' : 'Dark Mode 🌙'}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {/* Registration Card */}
-          <View style={styles.card}>
-            <center><Text style={styles.cardTitle}>Create Account</Text></center>
-            <Text style={styles.cardSubtitle}>
-
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: themeColors.card,
+                borderColor: themeColors.cardBorder,
+              },
+            ]}
+          >
+            <Text style={[styles.cardTitle, { color: themeColors.text }]}>Create Account</Text>
+            <Text style={[styles.cardSubtitle, { color: themeColors.textSecondary }]}>
+              Join PowerSense to monitor and optimize your consumption
             </Text>
 
             {errorMessage ? (
               <View style={styles.errorBox}>
-                <Ionicons name="alert-circle" size={18} color={colors.danger} />
+                <Ionicons name="alert-circle" size={18} color={themeColors.danger} />
                 <Text style={styles.errorText}>{errorMessage}</Text>
               </View>
             ) : null}
@@ -186,22 +226,32 @@ export default function RegisterScreen() {
             {/* Full Name */}
             <View style={styles.inputGroup}>
               <View style={styles.labelRow}>
-                <Text style={styles.inputLabel}>FULL NAME</Text>
+                <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>FULL NAME</Text>
                 {fullName.length > 0 && (
-                  <Text style={[styles.miniStatus, { color: isNameValid ? colors.primary : colors.danger }]}>
+                  <Text style={[styles.miniStatus, { color: isNameValid ? themeColors.primary : themeColors.danger }]}>
                     {isNameValid ? '✓ Valid' : 'Min. 2 chars'}
                   </Text>
                 )}
               </View>
-              <View style={[styles.inputWrapper, fullName.length > 0 && (isNameValid ? styles.inputValid : styles.inputInvalid)]}>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  {
+                    backgroundColor: themeColors.inputBg,
+                    borderColor: fullName.length > 0 ? (isNameValid ? themeColors.primary : themeColors.danger) : themeColors.inputBorder,
+                  },
+                ]}
+              >
                 <Ionicons
                   name="person-outline"
                   size={19}
-                  color={fullName.length > 0 ? (isNameValid ? colors.primary : colors.danger) : colors.textSecondary}
+                  color={fullName.length > 0 ? (isNameValid ? themeColors.primary : themeColors.danger) : themeColors.textSecondary}
                   style={styles.inputIcon}
                 />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: themeColors.text }]}
+                  placeholder="e.g. Divin Babu"
+                  placeholderTextColor={themeColors.textMuted}
                   value={fullName}
                   onChangeText={setFullName}
                 />
@@ -211,22 +261,32 @@ export default function RegisterScreen() {
             {/* Mobile Number */}
             <View style={styles.inputGroup}>
               <View style={styles.labelRow}>
-                <Text style={styles.inputLabel}>MOBILE NUMBER</Text>
+                <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>MOBILE NUMBER</Text>
                 {phone.length > 0 && (
-                  <Text style={[styles.miniStatus, { color: phoneValidation?.isValid ? colors.primary : colors.danger }]}>
+                  <Text style={[styles.miniStatus, { color: phoneValidation?.isValid ? themeColors.primary : themeColors.danger }]}>
                     {phoneValidation?.isValid ? '✓ Valid' : phoneValidation?.message}
                   </Text>
                 )}
               </View>
-              <View style={[styles.inputWrapper, phone.length > 0 && (phoneValidation?.isValid ? styles.inputValid : styles.inputInvalid)]}>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  {
+                    backgroundColor: themeColors.inputBg,
+                    borderColor: phone.length > 0 ? (phoneValidation?.isValid ? themeColors.primary : themeColors.danger) : themeColors.inputBorder,
+                  },
+                ]}
+              >
                 <Ionicons
                   name="call-outline"
                   size={19}
-                  color={phone.length > 0 ? (phoneValidation?.isValid ? colors.primary : colors.danger) : colors.textSecondary}
+                  color={phone.length > 0 ? (phoneValidation?.isValid ? themeColors.primary : themeColors.danger) : themeColors.textSecondary}
                   style={styles.inputIcon}
                 />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: themeColors.text }]}
+                  placeholder="10-digit mobile number"
+                  placeholderTextColor={themeColors.textMuted}
                   value={phone}
                   onChangeText={handlePhoneChange}
                   keyboardType="number-pad"
@@ -238,22 +298,32 @@ export default function RegisterScreen() {
             {/* Email Address */}
             <View style={styles.inputGroup}>
               <View style={styles.labelRow}>
-                <Text style={styles.inputLabel}>EMAIL ADDRESS</Text>
+                <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>EMAIL ADDRESS</Text>
                 {emailLiveState.message ? (
                   <Text style={[styles.miniStatus, { color: emailLiveState.color }]}>
                     {emailLiveState.message}
                   </Text>
                 ) : null}
               </View>
-              <View style={[styles.inputWrapper, email.length > 0 && (emailLiveState.isValid === true ? styles.inputValid : emailLiveState.isValid === false ? styles.inputInvalid : null)]}>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  {
+                    backgroundColor: themeColors.inputBg,
+                    borderColor: email.length > 0 && emailLiveState.isValid !== null ? (emailLiveState.isValid ? themeColors.primary : themeColors.danger) : themeColors.inputBorder,
+                  },
+                ]}
+              >
                 <Ionicons
                   name="mail-outline"
                   size={19}
-                  color={email.length > 0 && emailLiveState.isValid !== null ? (emailLiveState.isValid ? colors.primary : colors.danger) : colors.textSecondary}
+                  color={email.length > 0 && emailLiveState.isValid !== null ? (emailLiveState.isValid ? themeColors.primary : themeColors.danger) : themeColors.textSecondary}
                   style={styles.inputIcon}
                 />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: themeColors.text }]}
+                  placeholder="name@example.com"
+                  placeholderTextColor={themeColors.textMuted}
                   value={email}
                   onChangeText={handleEmailChange}
                   autoCapitalize="none"
@@ -264,16 +334,26 @@ export default function RegisterScreen() {
 
             {/* Password */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>PASSWORD</Text>
-              <View style={[styles.inputWrapper, password.length > 0 && (isPassValid ? styles.inputValid : styles.inputInvalid)]}>
+              <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>PASSWORD</Text>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  {
+                    backgroundColor: themeColors.inputBg,
+                    borderColor: password.length > 0 ? (isPassValid ? themeColors.primary : themeColors.danger) : themeColors.inputBorder,
+                  },
+                ]}
+              >
                 <Ionicons
                   name="lock-closed-outline"
                   size={19}
-                  color={password.length > 0 ? (isPassValid ? colors.primary : colors.danger) : colors.textSecondary}
+                  color={password.length > 0 ? (isPassValid ? themeColors.primary : themeColors.danger) : themeColors.textSecondary}
                   style={styles.inputIcon}
                 />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: themeColors.text }]}
+                  placeholder="Min. 6 characters"
+                  placeholderTextColor={themeColors.textMuted}
                   secureTextEntry={!showPassword}
                   value={password}
                   onChangeText={setPassword}
@@ -285,13 +365,13 @@ export default function RegisterScreen() {
                   <Ionicons
                     name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                     size={19}
-                    color={colors.textSecondary}
+                    color={themeColors.textSecondary}
                   />
                 </TouchableOpacity>
               </View>
               {password.length > 0 && (
                 <View style={styles.strengthRow}>
-                  <View style={styles.strengthBarBg}>
+                  <View style={[styles.strengthBarBg, { backgroundColor: isDark ? '#243040' : '#E2E8F0' }]}>
                     <View
                       style={[
                         styles.strengthBarFill,
@@ -309,22 +389,32 @@ export default function RegisterScreen() {
             {/* Confirm Password */}
             <View style={styles.inputGroup}>
               <View style={styles.labelRow}>
-                <Text style={styles.inputLabel}>CONFIRM PASSWORD</Text>
+                <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>CONFIRM PASSWORD</Text>
                 {confirmPassword.length > 0 && (
-                  <Text style={[styles.miniStatus, { color: isConfirmValid ? colors.primary : colors.danger }]}>
+                  <Text style={[styles.miniStatus, { color: isConfirmValid ? themeColors.primary : themeColors.danger }]}>
                     {isConfirmValid ? '✓ Match' : '✕ Mismatch'}
                   </Text>
                 )}
               </View>
-              <View style={[styles.inputWrapper, confirmPassword.length > 0 && (isConfirmValid ? styles.inputValid : styles.inputInvalid)]}>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  {
+                    backgroundColor: themeColors.inputBg,
+                    borderColor: confirmPassword.length > 0 ? (isConfirmValid ? themeColors.primary : themeColors.danger) : themeColors.inputBorder,
+                  },
+                ]}
+              >
                 <Ionicons
                   name="checkmark-circle-outline"
                   size={19}
-                  color={confirmPassword ? (isConfirmValid ? colors.primary : colors.danger) : colors.textSecondary}
+                  color={confirmPassword ? (isConfirmValid ? themeColors.primary : themeColors.danger) : themeColors.textSecondary}
                   style={styles.inputIcon}
                 />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: themeColors.text }]}
+                  placeholder="Repeat your password"
+                  placeholderTextColor={themeColors.textMuted}
                   secureTextEntry={!showPassword}
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
@@ -337,10 +427,18 @@ export default function RegisterScreen() {
               style={styles.termsRow}
               onPress={() => setAgreeTerms(!agreeTerms)}
             >
-              <View style={[styles.checkbox, agreeTerms && styles.checkboxChecked]}>
+              <View
+                style={[
+                  styles.checkbox,
+                  {
+                    backgroundColor: agreeTerms ? '#00C48C' : themeColors.inputBg,
+                    borderColor: agreeTerms ? '#00C48C' : themeColors.inputBorder,
+                  },
+                ]}
+              >
                 {agreeTerms && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
               </View>
-              <Text style={styles.termsText}>
+              <Text style={[styles.termsText, { color: themeColors.textSecondary }]}>
                 I agree to the <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
                 <Text style={styles.termsLink}>Privacy Policy</Text>
               </Text>
@@ -373,7 +471,7 @@ export default function RegisterScreen() {
 
           {/* Footer Navigation Link */}
           <View style={styles.footerRow}>
-            <Text style={styles.footerText}>Already have an account?</Text>
+            <Text style={[styles.footerText, { color: themeColors.textSecondary }]}>Already have an account?</Text>
             <TouchableOpacity onPress={() => router.push('/login')}>
               <Text style={styles.loginLink}>Sign In</Text>
             </TouchableOpacity>
@@ -387,7 +485,6 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#EDF5F1',
   },
   container: {
     flex: 1,
@@ -398,25 +495,46 @@ const styles = StyleSheet.create({
   },
   headerSection: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   logoBadge: {
-    width: 68,
-    height: 68,
-    borderRadius: 22,
-    backgroundColor: '#E8FBF4',
+    width: 72,
+    height: 72,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
+    borderWidth: 1.5,
+    position: 'relative',
     shadowColor: '#00C48C',
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.2,
     shadowRadius: 12,
+    elevation: 4,
+  },
+  modeIndicatorBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
     elevation: 3,
+  },
+  themeHintBtn: {
+    marginTop: 6,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+  },
+  themeHintText: {
+    fontSize: 11,
+    fontWeight: '500',
   },
   appTitle: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#111827',
     letterSpacing: 0.3,
   },
   appTitleHighlight: {
@@ -425,89 +543,77 @@ const styles = StyleSheet.create({
   appSubtitle: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#64748B',
-    marginTop: 4,
+    marginTop: 2,
   },
   card: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 24,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
+    shadowOpacity: 0.06,
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 16,
-    elevation: 2,
+    elevation: 3,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
     marginBottom: 20,
   },
   cardTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#111827',
+    textAlign: 'center',
   },
   cardSubtitle: {
     fontSize: 13,
-    color: '#64748B',
     marginTop: 4,
     marginBottom: 20,
+    textAlign: 'center',
   },
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#FEE2E2',
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderWidth: 1,
     borderRadius: 12,
     padding: 12,
     marginBottom: 16,
   },
   errorText: {
     fontSize: 13,
-    color: '#B91C1C',
+    color: '#EF4444',
     fontWeight: '600',
     flex: 1,
   },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: 14,
   },
   labelRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   inputLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#64748B',
     letterSpacing: 0.8,
   },
   miniStatus: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAF9',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E5E9E7',
     paddingHorizontal: 14,
     height: 50,
-  },
-  inputValid: {
-    borderColor: '#00C48C',
-  },
-  inputInvalid: {
-    borderColor: '#EF4444',
   },
   inputIcon: {
     marginRight: 10,
   },
   input: {
     flex: 1,
-    color: '#111827',
     fontSize: 15,
     height: '100%',
   },
@@ -523,7 +629,6 @@ const styles = StyleSheet.create({
   strengthBarBg: {
     flex: 1,
     height: 4,
-    backgroundColor: '#E2E8F0',
     borderRadius: 2,
     overflow: 'hidden',
   },
@@ -546,18 +651,11 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 6,
     borderWidth: 1.5,
-    borderColor: '#CBD5E1',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  checkboxChecked: {
-    backgroundColor: '#00C48C',
-    borderColor: '#00C48C',
   },
   termsText: {
     fontSize: 13,
-    color: '#64748B',
     flex: 1,
   },
   termsLink: {
@@ -596,7 +694,6 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 14,
-    color: '#64748B',
   },
   loginLink: {
     fontSize: 14,

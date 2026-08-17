@@ -13,7 +13,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Redirect } from 'expo-router';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
-import { colors } from '../../src/theme/colors';
 import { useStore } from '../../src/store/StoreContext';
 import { fetchAiRecommendationsData } from '../../src/services/api';
 
@@ -25,7 +24,7 @@ const DEFAULT_RECS = [
 
 export default function AiInsightsScreen() {
   const router = useRouter();
-  const { state } = useStore();
+  const { state, isDark, themeColors } = useStore();
 
   if (!state.isLoggedIn) return <Redirect href="/login" />;
 
@@ -77,66 +76,35 @@ export default function AiInsightsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]} edges={['top']}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={24} color="#111827" />
+            <Ionicons name="chevron-back" size={24} color={themeColors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>AI Insights</Text>
+          <Text style={[styles.headerTitle, { color: themeColors.text }]}>AI Insights</Text>
           <View style={{ width: 40 }} />
         </View>
 
         {/* Monthly Insight Hero Card */}
-        <View style={styles.monthlyCard}>
+        <View style={[styles.monthlyCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
           <View style={styles.monthlyTextCol}>
-            <Text style={styles.monthlyLabel}>Monthly Insight</Text>
-            <Text style={styles.monthlyDesc}>
+            <Text style={[styles.monthlyLabel, { color: themeColors.text }]}>Monthly Insight</Text>
+            <Text style={[styles.monthlyDesc, { color: themeColors.textSecondary }]}>
               You used 15% less energy this month compared to last month.
             </Text>
           </View>
 
           {/* 3D AI Robot Graphic */}
-          <View style={styles.robotGraphicWrapper}>
-            <View style={styles.robotHead}>
-              <View style={styles.robotAntenna} />
-              <View style={styles.robotFace}>
-                <View style={styles.robotEye} />
-                <View style={styles.robotEye} />
-              </View>
-              <View style={styles.robotSmile} />
-            </View>
-            <View style={styles.robotBody}>
-              <View style={styles.robotCore} />
+          <View style={styles.robotContainer}>
+            <View style={[styles.robotCircle, { backgroundColor: isDark ? 'rgba(0, 196, 140, 0.15)' : '#E8FBF4' }]}>
+              <Ionicons name="sparkles" size={32} color="#00C48C" />
             </View>
           </View>
         </View>
 
-        {/* Recommendations Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recommendations</Text>
-
-          <View style={styles.recommendationsList}>
-            {recommendations.map((recText, idx) => {
-              const icons = ['leaf-outline', 'bulb-outline', 'time-outline', 'shield-checkmark-outline'];
-              const iconColors = ['#111827', '#F59E0B', '#3B82F6', '#00C48C'];
-              const iconName = icons[idx % icons.length];
-              const iconColor = iconColors[idx % iconColors.length];
-
-              return (
-                <View key={idx} style={styles.recCard}>
-                  <View style={styles.recIconBadge}>
-                    <Ionicons name={iconName as any} size={20} color={iconColor} />
-                  </View>
-                  <Text style={styles.recText}>{recText}</Text>
-                </View>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* Green Savings Banner */}
+        {/* Potential Savings Banner */}
         <LinearGradient
           colors={['#00D589', '#009E69']}
           start={{ x: 0, y: 0 }}
@@ -144,35 +112,37 @@ export default function AiInsightsScreen() {
           style={styles.savingsBanner}
         >
           <View style={styles.savingsTextCol}>
-            <Text style={styles.savingsLabel}>You can save up to</Text>
-            <Text style={styles.savingsAmount}>{savingsAmount} <Text style={styles.savingsMonth}>this month</Text></Text>
-            <Text style={styles.savingsSub}>by optimizing usage!</Text>
+            <Text style={styles.savingsLabel}>POTENTIAL SAVINGS</Text>
+            <Text style={styles.savingsAmount}>
+              {savingsAmount} <Text style={styles.savingsMonth}>/ month</Text>
+            </Text>
+            <Text style={styles.savingsSub}>By following AI energy recommendations</Text>
           </View>
 
-          {/* Upward Growth Chart & Coin Graphic */}
           <View style={styles.growthGraphic}>
-            <Svg width="70" height="50" viewBox="0 0 70 50">
-              <Path
-                d="M 5 45 L 25 30 L 42 35 L 65 10"
-                fill="none"
-                stroke="#FFFFFF"
-                strokeWidth="3"
-                strokeLinecap="round"
-              />
-              <Path d="M 55 10 L 65 10 L 65 20" fill="none" stroke="#FFFFFF" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-              {/* Stacked Coins */}
-              <Rect x="48" y="32" width="16" height="6" rx="3" fill="#FBBF24" />
-              <Rect x="48" y="24" width="16" height="6" rx="3" fill="#FDE047" />
-              <Rect x="48" y="16" width="16" height="6" rx="3" fill="#FEF08A" />
-            </Svg>
+            <Ionicons name="trending-down" size={36} color="#FFFFFF" />
           </View>
         </LinearGradient>
 
-        {/* AI Chatbot Assistant */}
-        <View style={styles.chatSection}>
-          <Text style={styles.sectionTitle}>Ask PowerSense AI</Text>
+        {/* Recommendations Section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Recommendations</Text>
+          <View style={styles.recommendationsList}>
+            {recommendations.map((rec, idx) => (
+              <View key={idx} style={[styles.recCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
+                <View style={[styles.recIconBadge, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder }]}>
+                  <Ionicons name="bulb-outline" size={18} color="#00C48C" />
+                </View>
+                <Text style={[styles.recText, { color: themeColors.text }]}>{rec}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
 
-          <View style={styles.chatBox}>
+        {/* Interactive AI Chat Section */}
+        <View style={styles.chatSection}>
+          <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Ask PowerSense AI</Text>
+          <View style={[styles.chatBox, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
             {chatMessages.map((msg, idx) => (
               <View
                 key={idx}
@@ -182,20 +152,22 @@ export default function AiInsightsScreen() {
                 ]}
               >
                 {msg.role === 'assistant' && (
-                  <View style={styles.aiMsgBadge}>
-                    <Ionicons name="flash" size={12} color="#00C48C" />
+                  <View style={[styles.aiMsgBadge, { backgroundColor: isDark ? 'rgba(0, 196, 140, 0.2)' : '#E8FBF4' }]}>
+                    <Ionicons name="sparkles" size={12} color="#00C48C" />
                   </View>
                 )}
                 <View
                   style={[
                     styles.msgBubble,
-                    msg.role === 'user' ? styles.userBubble : styles.aiBubble,
+                    msg.role === 'user'
+                      ? styles.userBubble
+                      : [styles.aiBubble, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder }],
                   ]}
                 >
                   <Text
                     style={[
                       styles.msgText,
-                      msg.role === 'user' ? styles.userMsgText : styles.aiMsgText,
+                      msg.role === 'user' ? styles.userMsgText : [styles.aiMsgText, { color: themeColors.text }],
                     ]}
                   >
                     {msg.text}
@@ -204,11 +176,12 @@ export default function AiInsightsScreen() {
               </View>
             ))}
 
-            <View style={styles.chatInputRow}>
+            {/* Input Row */}
+            <View style={[styles.chatInputRow, { backgroundColor: themeColors.inputBg, borderColor: themeColors.inputBorder }]}>
               <TextInput
-                style={styles.chatInput}
-                placeholder="Ask about tariffs, savings, or hardware..."
-                placeholderTextColor="#94A3B8"
+                style={[styles.chatInput, { color: themeColors.text }]}
+                placeholder="Ask about your bill, voltage, or savings..."
+                placeholderTextColor={themeColors.textMuted}
                 value={question}
                 onChangeText={setQuestion}
                 onSubmitEditing={handleAsk}
@@ -229,7 +202,6 @@ export default function AiInsightsScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#EDF5F1',
   },
   container: {
     flex: 1,
@@ -249,152 +221,48 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 40,
     height: 40,
-    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
   },
 
   // Monthly Card
   monthlyCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
+    borderRadius: 22,
+    padding: 18,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 12,
+    justifyContent: 'space-between',
+    marginBottom: 16,
     elevation: 2,
     borderWidth: 1,
-    borderColor: '#E5E9E7',
   },
   monthlyTextCol: {
     flex: 1,
-    paddingRight: 12,
+    paddingRight: 10,
   },
   monthlyLabel: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
-    color: '#111827',
     marginBottom: 4,
   },
   monthlyDesc: {
     fontSize: 13,
-    color: '#64748B',
     lineHeight: 18,
   },
-  robotGraphicWrapper: {
-    width: 68,
-    height: 68,
-    borderRadius: 20,
-    backgroundColor: '#E8FBF4',
+  robotContainer: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  robotHead: {
-    width: 36,
-    height: 28,
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
+  robotCircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#00C48C',
-  },
-  robotAntenna: {
-    width: 3,
-    height: 4,
-    backgroundColor: '#00C48C',
-    position: 'absolute',
-    top: -5,
-  },
-  robotFace: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  robotEye: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#00C48C',
-  },
-  robotSmile: {
-    width: 8,
-    height: 2,
-    backgroundColor: '#00C48C',
-    borderRadius: 1,
-    marginTop: 3,
-  },
-  robotBody: {
-    width: 22,
-    height: 12,
-    borderBottomLeftRadius: 6,
-    borderBottomRightRadius: 6,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
-    borderColor: '#00C48C',
-    marginTop: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  robotCore: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#00D589',
-  },
-
-  // Recommendations
-  section: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 12,
-  },
-  recommendationsList: {
-    gap: 10,
-  },
-  recCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 16,
-    gap: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 10,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: '#E5E9E7',
-  },
-  recIconBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: '#F8FAF9',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E9E7',
-  },
-  recText: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#111827',
-    lineHeight: 18,
   },
 
   // Savings Banner
@@ -405,19 +273,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 20,
-    shadowColor: '#00D589',
-    shadowOpacity: 0.25,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 16,
     elevation: 5,
   },
   savingsTextCol: {
     flex: 1,
   },
   savingsLabel: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
     color: 'rgba(255, 255, 255, 0.9)',
+    letterSpacing: 0.5,
   },
   savingsAmount: {
     fontSize: 22,
@@ -438,16 +303,50 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
+  // Recommendations
+  section: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  recommendationsList: {
+    gap: 10,
+  },
+  recCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 18,
+    padding: 16,
+    gap: 14,
+    elevation: 2,
+    borderWidth: 1,
+  },
+  recIconBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  recText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
+  },
+
   // Chat Section
   chatSection: {
     marginTop: 4,
   },
   chatBox: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 22,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#E5E9E7',
     gap: 12,
   },
   msgRow: {
@@ -465,7 +364,6 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#E8FBF4',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -480,9 +378,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 4,
   },
   aiBubble: {
-    backgroundColor: '#F8FAF9',
     borderWidth: 1,
-    borderColor: '#E5E9E7',
     borderBottomLeftRadius: 4,
   },
   msgText: {
@@ -492,16 +388,12 @@ const styles = StyleSheet.create({
   userMsgText: {
     color: '#FFFFFF',
   },
-  aiMsgText: {
-    color: '#111827',
-  },
+  aiMsgText: {},
   chatInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAF9',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E5E9E7',
     paddingHorizontal: 12,
     height: 46,
     marginTop: 4,
@@ -509,7 +401,6 @@ const styles = StyleSheet.create({
   chatInput: {
     flex: 1,
     fontSize: 13,
-    color: '#111827',
   },
   sendBtn: {
     width: 32,

@@ -2,7 +2,6 @@ import { Tabs, Redirect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../../src/theme/colors';
 import { useStore } from '../../src/store/StoreContext';
 
 function TabBarIcon({ name, color, size = 22 }: { name: React.ComponentProps<typeof Ionicons>['name']; color: string; size?: number }) {
@@ -10,7 +9,7 @@ function TabBarIcon({ name, color, size = 22 }: { name: React.ComponentProps<typ
 }
 
 export default function TabsLayout() {
-  const { state } = useStore();
+  const { state, isDark, themeColors } = useStore();
 
   if (!state.isLoggedIn) {
     return <Redirect href="/login" />;
@@ -28,20 +27,20 @@ export default function TabsLayout() {
         tabBarStyle: isAdmin
           ? { display: 'none' } // Hide consumer tab bar for Admin
           : {
-              backgroundColor: '#FFFFFF',
-              borderTopColor: '#E5E9E7',
+              backgroundColor: themeColors.tabBarBg,
+              borderTopColor: themeColors.tabBarBorder,
               borderTopWidth: 1,
               height: 60 + bottomInset,
               paddingBottom: bottomInset,
               paddingTop: 8,
               shadowColor: '#000',
-              shadowOpacity: 0.05,
+              shadowOpacity: isDark ? 0.3 : 0.05,
               shadowOffset: { width: 0, height: -2 },
               shadowRadius: 10,
               elevation: 8,
             },
-        tabBarActiveTintColor: '#00C48C',
-        tabBarInactiveTintColor: '#64748B',
+        tabBarActiveTintColor: themeColors.tabBarActive,
+        tabBarInactiveTintColor: themeColors.tabBarInactive,
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',

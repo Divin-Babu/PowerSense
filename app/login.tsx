@@ -15,13 +15,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Redirect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors } from '../src/theme/colors';
 import { useStore } from '../src/store/StoreContext';
 import { loginUser } from '../src/services/api';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { state, login } = useStore();
+  const { state, login, isDark, themeColors, toggleTheme } = useStore();
 
   if (state.isLoggedIn) {
     return <Redirect href={state.user?.role === 'admin' ? '/(tabs)/admin' : '/(tabs)/dashboard'} />;
@@ -66,7 +65,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.container}
@@ -76,46 +75,89 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Header & Logo */}
+          {/* Header & Interactive Theme Toggle Logo */}
           <View style={styles.headerSection}>
-            <View style={styles.logoBadge}>
+            <TouchableOpacity
+              onPress={toggleTheme}
+              activeOpacity={0.75}
+              style={[
+                styles.logoBadge,
+                {
+                  backgroundColor: themeColors.logoBadgeBg,
+                  borderColor: themeColors.logoBadgeBorder,
+                },
+              ]}
+              accessibilityLabel="Toggle Dark and White Mode"
+              accessibilityHint="Tap to switch between dark and light themes"
+            >
               <Ionicons name="flash" size={36} color="#00C48C" />
-            </View>
-            <Text style={styles.appTitle}>
+              <View style={[styles.modeIndicatorBadge, { backgroundColor: isDark ? '#1F2937' : '#FFFFFF', borderColor: isDark ? '#374151' : '#E2E8F0' }]}>
+                <Ionicons
+                  name={isDark ? 'moon' : 'sunny'}
+                  size={12}
+                  color={isDark ? '#38BDF8' : '#F59E0B'}
+                />
+              </View>
+            </TouchableOpacity>
+
+            <Text style={[styles.appTitle, { color: themeColors.text }]}>
               Power<Text style={styles.appTitleHighlight}>Sense</Text>
             </Text>
-            <Text style={styles.appSubtitle}>
+            <Text style={[styles.appSubtitle, { color: themeColors.textSecondary }]}>
               Smart Energy, Smarter You
             </Text>
+            <TouchableOpacity onPress={toggleTheme} style={styles.themeHintBtn}>
+              <Text style={[styles.themeHintText, { color: themeColors.textMuted }]}>
+                Tap ⚡ for {isDark ? 'White Mode ☀️' : 'Dark Mode 🌙'}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {/* Form Card */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Welcome Back</Text>
-            <Text style={styles.cardSubtitle}>
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: themeColors.card,
+                borderColor: themeColors.cardBorder,
+                shadowColor: isDark ? '#000000' : '#000000',
+              },
+            ]}
+          >
+            <Text style={[styles.cardTitle, { color: themeColors.text }]}>Welcome Back</Text>
+            <Text style={[styles.cardSubtitle, { color: themeColors.textSecondary }]}>
+              Sign in to monitor and control your smart plug
             </Text>
 
             {errorMessage ? (
               <View style={styles.errorBox}>
-                <Ionicons name="alert-circle" size={18} color={colors.danger} />
+                <Ionicons name="alert-circle" size={18} color={themeColors.danger} />
                 <Text style={styles.errorText}>{errorMessage}</Text>
               </View>
             ) : null}
 
             {/* Email / Username Field */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>EMAIL OR USERNAME</Text>
-              <View style={styles.inputWrapper}>
+              <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>EMAIL OR USERNAME</Text>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  {
+                    backgroundColor: themeColors.inputBg,
+                    borderColor: themeColors.inputBorder,
+                  },
+                ]}
+              >
                 <Ionicons
                   name="mail-outline"
                   size={19}
-                  color={colors.textSecondary}
+                  color={themeColors.textSecondary}
                   style={styles.inputIcon}
                 />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: themeColors.text }]}
                   placeholder="Enter your email or username"
-                  placeholderTextColor={colors.textMuted}
+                  placeholderTextColor={themeColors.textMuted}
                   value={email}
                   onChangeText={setEmail}
                   autoCapitalize="none"
@@ -126,18 +168,26 @@ export default function LoginScreen() {
 
             {/* Password Field */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>PASSWORD</Text>
-              <View style={styles.inputWrapper}>
+              <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>PASSWORD</Text>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  {
+                    backgroundColor: themeColors.inputBg,
+                    borderColor: themeColors.inputBorder,
+                  },
+                ]}
+              >
                 <Ionicons
                   name="lock-closed-outline"
                   size={19}
-                  color={colors.textSecondary}
+                  color={themeColors.textSecondary}
                   style={styles.inputIcon}
                 />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: themeColors.text }]}
                   placeholder="Enter your password"
-                  placeholderTextColor={colors.textMuted}
+                  placeholderTextColor={themeColors.textMuted}
                   secureTextEntry={!showPassword}
                   value={password}
                   onChangeText={setPassword}
@@ -149,7 +199,7 @@ export default function LoginScreen() {
                   <Ionicons
                     name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                     size={19}
-                    color={colors.textSecondary}
+                    color={themeColors.textSecondary}
                   />
                 </TouchableOpacity>
               </View>
@@ -161,10 +211,20 @@ export default function LoginScreen() {
                 style={styles.rememberRow}
                 onPress={() => setRememberMe(!rememberMe)}
               >
-                <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                <View
+                  style={[
+                    styles.checkbox,
+                    {
+                      backgroundColor: rememberMe ? '#00C48C' : themeColors.inputBg,
+                      borderColor: rememberMe ? '#00C48C' : themeColors.inputBorder,
+                    },
+                  ]}
+                >
                   {rememberMe && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
                 </View>
-                <Text style={styles.rememberText}>Remember my login</Text>
+                <Text style={[styles.rememberText, { color: themeColors.textSecondary }]}>
+                  Remember my login
+                </Text>
               </Pressable>
             </View>
 
@@ -195,7 +255,7 @@ export default function LoginScreen() {
 
           {/* Footer Navigation Link */}
           <View style={styles.footerRow}>
-            <Text style={styles.footerText}>Don't have an account?</Text>
+            <Text style={[styles.footerText, { color: themeColors.textSecondary }]}>Don't have an account?</Text>
             <TouchableOpacity onPress={() => router.push('/register')}>
               <Text style={styles.registerLink}>Register</Text>
             </TouchableOpacity>
@@ -209,7 +269,6 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#EDF5F1',
   },
   container: {
     flex: 1,
@@ -221,25 +280,46 @@ const styles = StyleSheet.create({
   },
   headerSection: {
     alignItems: 'center',
-    marginBottom: 28,
+    marginBottom: 24,
   },
   logoBadge: {
-    width: 68,
-    height: 68,
-    borderRadius: 22,
-    backgroundColor: '#E8FBF4',
+    width: 72,
+    height: 72,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
+    borderWidth: 1.5,
+    position: 'relative',
     shadowColor: '#00C48C',
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.2,
     shadowRadius: 12,
+    elevation: 4,
+  },
+  modeIndicatorBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
     elevation: 3,
+  },
+  themeHintBtn: {
+    marginTop: 6,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+  },
+  themeHintText: {
+    fontSize: 11,
+    fontWeight: '500',
   },
   appTitle: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#111827',
     letterSpacing: 0.3,
   },
   appTitleHighlight: {
@@ -248,31 +328,25 @@ const styles = StyleSheet.create({
   appSubtitle: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#64748B',
-    marginTop: 4,
+    marginTop: 2,
   },
   card: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 24,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
+    shadowOpacity: 0.06,
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 16,
-    elevation: 2,
+    elevation: 3,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   cardTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#111827',
     textAlign: 'center',
   },
   cardSubtitle: {
     fontSize: 13,
-    color: '#64748B',
     marginTop: 4,
     marginBottom: 20,
     textAlign: 'center',
@@ -281,14 +355,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#FEE2E2',
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderWidth: 1,
     borderRadius: 12,
     padding: 12,
     marginBottom: 16,
   },
   errorText: {
     fontSize: 13,
-    color: '#B91C1C',
+    color: '#EF4444',
     fontWeight: '600',
     flex: 1,
   },
@@ -298,17 +374,14 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#64748B',
     letterSpacing: 0.8,
     marginBottom: 8,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAF9',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E5E9E7',
     paddingHorizontal: 14,
     height: 50,
   },
@@ -317,7 +390,6 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    color: '#111827',
     fontSize: 15,
     height: '100%',
   },
@@ -328,7 +400,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginVertical: 12,
+    marginVertical: 10,
   },
   rememberRow: {
     flexDirection: 'row',
@@ -340,18 +412,11 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 6,
     borderWidth: 1.5,
-    borderColor: '#CBD5E1',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  checkboxChecked: {
-    backgroundColor: '#00C48C',
-    borderColor: '#00C48C',
   },
   rememberText: {
     fontSize: 13,
-    color: '#64748B',
     fontWeight: '500',
   },
   signInBtn: {
@@ -387,7 +452,6 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 14,
-    color: '#64748B',
   },
   registerLink: {
     fontSize: 14,

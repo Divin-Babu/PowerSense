@@ -15,7 +15,6 @@ import { useRouter, Redirect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { colors } from '../../src/theme/colors';
 import { useStore } from '../../src/store/StoreContext';
 import { fetchDevicesData } from '../../src/services/api';
 
@@ -35,7 +34,7 @@ const DEFAULT_DEVICES = [
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { state, togglePlugRelay, logout } = useStore();
+  const { state, togglePlugRelay, logout, isDark, themeColors, toggleTheme, setTheme } = useStore();
 
   const [deviceList, setDeviceList] = useState(DEFAULT_DEVICES);
   const [addModalVisible, setAddModalVisible] = useState(false);
@@ -89,7 +88,7 @@ export default function SettingsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]} edges={['top']}>
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
@@ -97,9 +96,12 @@ export default function SettingsScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>My Devices</Text>
+          <View>
+            <Text style={[styles.headerTitle, { color: themeColors.text }]}>Settings & Devices</Text>
+            <Text style={[styles.headerSub, { color: themeColors.textSecondary }]}>Manage hardware, appearance & session</Text>
+          </View>
           <TouchableOpacity
-            style={styles.addBtn}
+            style={[styles.addBtn, { backgroundColor: isDark ? '#1A2432' : '#E8FBF4', borderColor: isDark ? '#2B384A' : '#C5F0E1' }]}
             onPress={() => router.push('/provision')}
             activeOpacity={0.7}
           >
@@ -107,7 +109,67 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Appearance & Theme Toggle Section */}
+        <Text style={[styles.sectionHeader, { color: themeColors.textSecondary }]}>APPEARANCE & THEME</Text>
+        <View style={[styles.themeCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
+          <View style={styles.themeRow}>
+            <View style={[styles.themeIconBadge, { backgroundColor: isDark ? 'rgba(56, 189, 248, 0.15)' : '#FEF3C7' }]}>
+              <Ionicons
+                name={isDark ? 'moon' : 'sunny'}
+                size={22}
+                color={isDark ? '#38BDF8' : '#F59E0B'}
+              />
+            </View>
+            <View style={styles.themeDetails}>
+              <Text style={[styles.themeTitle, { color: themeColors.text }]}>
+                {isDark ? 'Dark Mode' : 'White Mode'}
+              </Text>
+              <Text style={[styles.themeSub, { color: themeColors.textSecondary }]}>
+                {isDark ? 'Using dark surfaces and sleek obsidian theme' : 'Using crisp bright white and soft mint theme'}
+              </Text>
+            </View>
+            <Switch
+              value={isDark}
+              onValueChange={toggleTheme}
+              trackColor={{ false: '#CBD5E1', true: '#00C48C' }}
+              thumbColor={isDark ? '#FFFFFF' : '#FFFFFF'}
+            />
+          </View>
+
+          {/* Quick theme selector buttons */}
+          <View style={styles.themeQuickRow}>
+            <TouchableOpacity
+              onPress={() => setTheme('light')}
+              style={[
+                styles.themeChoiceBtn,
+                !isDark && styles.themeChoiceActiveLight,
+                { borderColor: !isDark ? '#00C48C' : themeColors.subCardBorder, backgroundColor: !isDark ? '#E8FBF4' : themeColors.subCardBg },
+              ]}
+            >
+              <Ionicons name="sunny" size={16} color={!isDark ? '#009668' : themeColors.textMuted} />
+              <Text style={[styles.themeChoiceText, { color: !isDark ? '#009668' : themeColors.textSecondary, fontWeight: !isDark ? '700' : '500' }]}>
+                White Mode
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setTheme('dark')}
+              style={[
+                styles.themeChoiceBtn,
+                isDark && styles.themeChoiceActiveDark,
+                { borderColor: isDark ? '#00C48C' : themeColors.subCardBorder, backgroundColor: isDark ? 'rgba(0, 196, 140, 0.15)' : themeColors.subCardBg },
+              ]}
+            >
+              <Ionicons name="moon" size={16} color={isDark ? '#00C48C' : themeColors.textMuted} />
+              <Text style={[styles.themeChoiceText, { color: isDark ? '#00C48C' : themeColors.textSecondary, fontWeight: isDark ? '700' : '500' }]}>
+                Dark Mode
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Featured Smart Plug Card */}
+        <Text style={[styles.sectionHeader, { marginTop: 20, color: themeColors.textSecondary }]}>ACTIVE SMART PLUG NODE</Text>
         <LinearGradient
           colors={['#00D589', '#009E69']}
           start={{ x: 0, y: 0 }}
@@ -119,7 +181,7 @@ export default function SettingsScreen() {
               <Text style={styles.featuredTitle}>{singlePlug.name || 'Living Room Plug'}</Text>
               <View style={styles.onlineRow}>
                 <View style={styles.greenDot} />
-                <Text style={styles.onlineText}>Online</Text>
+                <Text style={styles.onlineText}>Online • {singlePlug.nodeId || 'ESP32-PZEM-PLUG-10A'}</Text>
               </View>
             </View>
 
@@ -147,17 +209,17 @@ export default function SettingsScreen() {
 
         {/* BLE Provisioning Action Card */}
         <TouchableOpacity
-          style={styles.bleSetupCard}
+          style={[styles.bleSetupCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}
           onPress={() => router.push('/provision')}
           activeOpacity={0.8}
         >
           <View style={styles.bleSetupLeft}>
-            <View style={styles.bleSetupIconBox}>
+            <View style={[styles.bleSetupIconBox, { backgroundColor: isDark ? 'rgba(0, 196, 140, 0.15)' : '#E8FBF4' }]}>
               <Ionicons name="bluetooth" size={24} color="#00C48C" />
             </View>
             <View style={styles.bleSetupTextCol}>
-              <Text style={styles.bleSetupTitle}>Add ESP32 Smart Plug</Text>
-              <Text style={styles.bleSetupSub}>Provision via Bluetooth Low Energy (BLE)</Text>
+              <Text style={[styles.bleSetupTitle, { color: themeColors.text }]}>Add ESP32 Smart Plug</Text>
+              <Text style={[styles.bleSetupSub, { color: themeColors.textSecondary }]}>Provision via Bluetooth Low Energy (BLE)</Text>
             </View>
           </View>
           <View style={styles.bleSetupBtn}>
@@ -167,20 +229,20 @@ export default function SettingsScreen() {
         </TouchableOpacity>
 
         {/* Other Devices Section Header */}
-        <Text style={styles.sectionHeader}>CONNECTED SMART PLUGS ({deviceList.length})</Text>
+        <Text style={[styles.sectionHeader, { color: themeColors.textSecondary }]}>CONNECTED SMART PLUGS ({deviceList.length})</Text>
 
         {/* Devices List */}
         <View style={styles.deviceList}>
           {deviceList.map((dev) => (
-            <View key={dev.id} style={styles.deviceCard}>
-              <View style={styles.deviceIconBadge}>
+            <View key={dev.id} style={[styles.deviceCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
+              <View style={[styles.deviceIconBadge, { backgroundColor: isDark ? 'rgba(0, 196, 140, 0.15)' : '#E8FBF4' }]}>
                 <Ionicons name="power" size={22} color="#00C48C" />
               </View>
 
               <View style={styles.deviceDetails}>
-                <Text style={styles.deviceName}>{dev.name}</Text>
-                <Text style={styles.deviceAppliance}>{dev.connected_appliance || 'Smart Load'}</Text>
-                <Text style={styles.deviceUid}>{dev.uid} • {dev.status}</Text>
+                <Text style={[styles.deviceName, { color: themeColors.text }]}>{dev.name}</Text>
+                <Text style={[styles.deviceAppliance, { color: themeColors.textSecondary }]}>{dev.connected_appliance || 'Smart Load'}</Text>
+                <Text style={[styles.deviceUid, { color: themeColors.textMuted }]}>{dev.uid} • {dev.status}</Text>
               </View>
 
               <View style={styles.deviceRight}>
@@ -191,7 +253,7 @@ export default function SettingsScreen() {
                     const updated = deviceList.map(d => d.id === dev.id ? { ...d, relay_state: d.relay_state === 'ON' ? 'OFF' : 'ON' } : d);
                     setDeviceList(updated);
                   }}
-                  trackColor={{ false: '#E2E8F0', true: '#A7F3D0' }}
+                  trackColor={{ false: isDark ? '#243040' : '#E2E8F0', true: '#A7F3D0' }}
                   thumbColor={dev.relay_state === 'ON' ? '#00C48C' : '#94A3B8'}
                 />
               </View>
@@ -200,15 +262,15 @@ export default function SettingsScreen() {
         </View>
 
         {/* Account Profile & Sign Out Section */}
-        <Text style={[styles.sectionHeader, { marginTop: 24 }]}>ACCOUNT & SESSION</Text>
-        <View style={styles.profileCard}>
+        <Text style={[styles.sectionHeader, { marginTop: 24, color: themeColors.textSecondary }]}>ACCOUNT & SESSION</Text>
+        <View style={[styles.profileCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
           <View style={styles.profileRow}>
-            <View style={styles.avatarBadge}>
+            <View style={[styles.avatarBadge, { backgroundColor: isDark ? 'rgba(0, 196, 140, 0.15)' : '#E8FBF4' }]}>
               <Ionicons name="person" size={22} color="#00C48C" />
             </View>
             <View style={styles.profileDetails}>
-              <Text style={styles.profileName}>{state.user?.name || 'Resident User'}</Text>
-              <Text style={styles.profileEmail}>{state.user?.email || 'user@powersense.ai'}</Text>
+              <Text style={[styles.profileName, { color: themeColors.text }]}>{state.user?.name || 'Resident User'}</Text>
+              <Text style={[styles.profileEmail, { color: themeColors.textSecondary }]}>{state.user?.email || 'user@powersense.ai'}</Text>
             </View>
           </View>
 
@@ -233,35 +295,43 @@ export default function SettingsScreen() {
           onRequestClose={() => setAddModalVisible(false)}
         >
           <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Add New Smart Plug</Text>
-              <Text style={styles.modalSub}>Enter plug name or room location</Text>
+            <View style={[styles.modalCard, { backgroundColor: themeColors.modalBg }]}>
+              <Text style={[styles.modalTitle, { color: themeColors.text }]}>Add New Smart Plug</Text>
+              <Text style={[styles.modalSub, { color: themeColors.textSecondary }]}>Enter plug name or room location</Text>
 
               <TextInput
-                style={styles.modalInput}
+                style={[
+                  styles.modalInput,
+                  {
+                    backgroundColor: themeColors.inputBg,
+                    borderColor: themeColors.inputBorder,
+                    color: themeColors.text,
+                  },
+                ]}
                 placeholder="e.g. Dining Room AC Plug"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={themeColors.textMuted}
                 value={newDeviceName}
                 onChangeText={setNewDeviceName}
               />
 
               <View style={styles.modalButtonsRow}>
                 <TouchableOpacity
-                  style={styles.modalCancelBtn}
+                  style={[styles.modalCancelBtn, { backgroundColor: themeColors.subCardBg }]}
                   onPress={() => setAddModalVisible(false)}
                 >
-                  <Text style={styles.modalCancelText}>Cancel</Text>
+                  <Text style={[styles.modalCancelText, { color: themeColors.textSecondary }]}>Cancel</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.modalAddBtn} onPress={handleAddDevice}>
-                  <Text style={styles.modalAddText}>Add Device</Text>
+                <TouchableOpacity
+                  style={styles.modalAddBtn}
+                  onPress={handleAddDevice}
+                >
+                  <Text style={styles.modalAddText}>Save Device</Text>
                 </TouchableOpacity>
               </View>
             </View>
           </View>
         </Modal>
-
-        <View style={{ height: 24 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -270,59 +340,119 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#EDF5F1',
   },
   container: {
     flex: 1,
   },
   content: {
     padding: 20,
-    paddingTop: 10,
+    paddingBottom: 40,
   },
-
-  // Header
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    alignItems: 'center',
+    marginBottom: 20,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  headerSub: {
+    fontSize: 13,
+    marginTop: 2,
   },
   addBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 14,
-    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  sectionHeader: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    marginBottom: 10,
+    marginTop: 10,
+  },
+
+  // Appearance & Theme Card
+  themeCard: {
+    borderRadius: 20,
+    padding: 16,
     borderWidth: 1,
-    borderColor: '#E5E9E7',
+    marginBottom: 10,
     shadowColor: '#000',
-    shadowOpacity: 0.04,
+    shadowOpacity: 0.03,
     shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 6,
+    shadowRadius: 8,
     elevation: 2,
+  },
+  themeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  themeIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  themeDetails: {
+    flex: 1,
+  },
+  themeTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  themeSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  themeQuickRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(150, 150, 150, 0.1)',
+  },
+  themeChoiceBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  themeChoiceActiveLight: {},
+  themeChoiceActiveDark: {},
+  themeChoiceText: {
+    fontSize: 12,
   },
 
   // Featured Card
   featuredCard: {
     borderRadius: 24,
     padding: 20,
-    marginBottom: 24,
-    shadowColor: '#00D589',
+    marginBottom: 16,
+    shadowColor: '#00C48C',
     shadowOpacity: 0.25,
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 6 },
     shadowRadius: 16,
     elevation: 6,
   },
   featuredTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   featuredTitle: {
     fontSize: 18,
@@ -336,8 +466,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   greenDot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: 4,
     backgroundColor: '#FFFFFF',
   },
@@ -352,18 +482,18 @@ const styles = StyleSheet.create({
     marginVertical: 14,
   },
   plugCircleGlow: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.4)',
   },
   featuredBottom: {
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.2)',
+    borderTopColor: 'rgba(255,255,255,0.25)',
     paddingTop: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -373,30 +503,23 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: 'rgba(255,255,255,0.8)',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
   featuredPowerVal: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '800',
     color: '#FFFFFF',
   },
 
-  // BLE Setup Action Card
+  // BLE Setup Card
   bleSetupCard: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 10,
-    elevation: 2,
-    borderWidth: 1.5,
-    borderColor: '#A7F3D0',
+    borderWidth: 1,
+    marginBottom: 18,
   },
   bleSetupLeft: {
     flexDirection: 'row',
@@ -408,7 +531,6 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: '#E8FBF4',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -418,11 +540,9 @@ const styles = StyleSheet.create({
   bleSetupTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#111827',
   },
   bleSetupSub: {
-    fontSize: 12,
-    color: '#64748B',
+    fontSize: 11,
     marginTop: 2,
   },
   bleSetupBtn: {
@@ -430,49 +550,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     backgroundColor: '#00C48C',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
   },
   bleSetupBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
     color: '#FFFFFF',
-  },
-
-  // Section Header
-  sectionHeader: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#64748B',
-    letterSpacing: 0.5,
-    marginBottom: 12,
   },
 
-  // Devices List
+  // Device list
   deviceList: {
-    gap: 12,
+    gap: 10,
+    marginBottom: 16,
   },
   deviceCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
+    borderRadius: 18,
+    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 10,
-    elevation: 2,
+    gap: 12,
     borderWidth: 1,
-    borderColor: '#E5E9E7',
   },
   deviceIconBadge: {
-    width: 46,
-    height: 46,
-    borderRadius: 16,
-    backgroundColor: '#E8FBF4',
+    width: 42,
+    height: 42,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -482,18 +586,15 @@ const styles = StyleSheet.create({
   deviceName: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#111827',
   },
   deviceAppliance: {
     fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
+    marginTop: 1,
   },
   deviceUid: {
     fontSize: 10,
-    color: '#94A3B8',
-    marginTop: 2,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginTop: 2,
   },
   deviceRight: {
     alignItems: 'flex-end',
@@ -508,14 +609,13 @@ const styles = StyleSheet.create({
   // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
   },
   modalCard: {
     width: '100%',
-    backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 24,
     shadowColor: '#000',
@@ -527,22 +627,17 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
   },
   modalSub: {
     fontSize: 13,
-    color: '#64748B',
     marginTop: 4,
     marginBottom: 16,
   },
   modalInput: {
-    backgroundColor: '#F8FAF9',
     borderRadius: 14,
     padding: 14,
     fontSize: 14,
-    color: '#111827',
     borderWidth: 1,
-    borderColor: '#E5E9E7',
     marginBottom: 20,
   },
   modalButtonsRow: {
@@ -553,14 +648,12 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     borderRadius: 14,
-    backgroundColor: '#F1F5F3',
     alignItems: 'center',
     justifyContent: 'center',
   },
   modalCancelText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#64748B',
   },
   modalAddBtn: {
     flex: 1,
@@ -578,16 +671,9 @@ const styles = StyleSheet.create({
 
   // Profile & Sign Out
   profileCard: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 18,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 10,
-    elevation: 2,
     borderWidth: 1,
-    borderColor: '#E5E9E7',
     marginBottom: 16,
   },
   profileRow: {
@@ -600,7 +686,6 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 16,
-    backgroundColor: '#E8FBF4',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -610,11 +695,9 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#111827',
   },
   profileEmail: {
     fontSize: 12,
-    color: '#64748B',
     marginTop: 2,
   },
   signOutBtn: {
@@ -622,11 +705,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#FEE2E2',
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
     paddingVertical: 12,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#FECACA',
+    borderColor: 'rgba(239, 68, 68, 0.3)',
   },
   signOutBtnText: {
     fontSize: 13,

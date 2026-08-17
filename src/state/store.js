@@ -1,6 +1,8 @@
 import { fetchLiveTelemetry, sendEsp32RelayCommand } from '../services/api.js';
 
 const savedSession = typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem('powersense_session') : null;
+const savedTheme = typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem('powersense_theme') : null;
+
 let initialUser = null;
 let initialLoggedIn = false;
 let initialPage = 'login';
@@ -19,6 +21,7 @@ if (savedSession) {
 }
 
 const initialAppState = {
+  theme: (savedTheme === 'dark' || savedTheme === 'light') ? savedTheme : 'light',
   currentPage: initialPage, // 'login' | 'register' | 'dashboard' | 'admin' | 'analytics' | 'alerts' | 'profile'
   isLoggedIn: initialLoggedIn,
   user: initialUser,
@@ -84,6 +87,9 @@ class Store {
     this.state = { ...initialAppState };
     this.listeners = new Set();
 
+    // Apply active theme to DOM immediately
+    this.applyThemeToDOM(this.state.theme);
+
     // Browser back/forward navigation protection
     if (typeof window !== 'undefined') {
       window.addEventListener('popstate', () => {
@@ -94,9 +100,47 @@ class Store {
         }
       });
 
+      // Expose globally for inline events
+      window.toggleTheme = () => this.toggleTheme();
+
       // Poll live ESP32 telemetry from backend
       setInterval(() => this.syncTelemetry(), 2500);
     }
+  }
+
+  applyThemeToDOM(mode) {
+    if (typeof document !== 'undefined') {
+      if (mode === 'dark') {
+        document.documentElement.classList.add('dark');
+        document.body.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+        document.body.classList.remove('dark');
+      }
+    }
+  }
+
+  toggleTheme() {
+    const nextTheme = this.state.theme === 'dark' ? 'light' : 'dark';
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('powersense_theme', nextTheme);
+      }
+    } catch (e) {}
+
+    this.applyThemeToDOM(nextTheme);
+    this.setState({ theme: nextTheme });
+  }
+
+  setTheme(mode) {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('powersense_theme', mode);
+      }
+    } catch (e) {}
+
+    this.applyThemeToDOM(mode);
+    this.setState({ theme: mode });
   }
 
   async syncTelemetry() {
@@ -162,6 +206,10 @@ class Store {
       }
     }
 
+    if ('theme' in partialState) {
+      this.applyThemeToDOM(nextState.theme);
+    }
+
     this.state = nextState;
     this.notify();
   }
@@ -198,11 +246,10 @@ class Store {
       }
     } catch (e) {}
 
-    const targetPage = userRole === 'admin' ? 'admin' : 'dashboard';
     this.setState({
       isLoggedIn: true,
       user: userData,
-      currentPage: targetPage
+      currentPage: userRole === 'admin' ? 'admin' : 'dashboard'
     });
   }
 
@@ -211,9 +258,6 @@ class Store {
       if (typeof window !== 'undefined') {
         if (window.localStorage) window.localStorage.removeItem('powersense_session');
         if (window.sessionStorage) window.sessionStorage.clear();
-        if (window.history && window.history.replaceState) {
-          window.history.replaceState(null, '', window.location.pathname);
-        }
       }
     } catch (e) {}
 
@@ -225,26 +269,7 @@ class Store {
   }
 
   setPage(page) {
-    let targetPage = page;
-
-    // Strict authentication guard for all protected routes
-    if (!this.state.isLoggedIn) {
-      if (targetPage !== 'register') {
-        targetPage = 'login';
-      }
-    } else {
-      if (targetPage === 'login' || targetPage === 'register') {
-        targetPage = this.state.user?.role === 'admin' ? 'admin' : 'dashboard';
-      }
-      if (targetPage === 'admin' && this.state.user?.role !== 'admin') {
-        targetPage = 'dashboard';
-      }
-    }
-
-    this.setState({ currentPage: targetPage });
-    if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+    this.setState({ currentPage: page });
   }
 
   togglePlugRelay() {
@@ -333,4 +358,3 @@ class Store {
 }
 
 export const store = new Store();
-

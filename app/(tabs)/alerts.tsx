@@ -10,7 +10,6 @@ import {
 import { useRouter, Redirect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../../src/theme/colors';
 import { useStore } from '../../src/store/StoreContext';
 import { fetchAlertsData } from '../../src/services/api';
 
@@ -65,7 +64,7 @@ const DEFAULT_ALERTS = [
 
 export default function AlertsScreen() {
   const router = useRouter();
-  const { state } = useStore();
+  const { state, isDark, themeColors } = useStore();
 
   const [activeFilter, setActiveFilter] = useState<AlertFilter>('all');
   const [alertsList, setAlertsList] = useState(DEFAULT_ALERTS);
@@ -97,7 +96,7 @@ export default function AlertsScreen() {
   });
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]} edges={['top']}>
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
@@ -105,11 +104,11 @@ export default function AlertsScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Alerts</Text>
+          <Text style={[styles.headerTitle, { color: themeColors.text }]}>Alerts & Notifications</Text>
         </View>
 
         {/* Filter Pills */}
-        <View style={styles.filtersWrapper}>
+        <View style={[styles.filtersWrapper, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
           {[
             { key: 'all', label: 'All' },
             { key: 'critical', label: 'Warnings' },
@@ -119,11 +118,20 @@ export default function AlertsScreen() {
             return (
               <TouchableOpacity
                 key={item.key}
-                style={[styles.filterPill, isSelected && styles.filterPillActive]}
+                style={[
+                  styles.filterPill,
+                  isSelected && styles.filterPillActive,
+                ]}
                 onPress={() => setActiveFilter(item.key as AlertFilter)}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.filterText, isSelected && styles.filterTextActive]}>
+                <Text
+                  style={[
+                    styles.filterText,
+                    { color: isSelected ? '#FFFFFF' : themeColors.textSecondary },
+                    isSelected && styles.filterTextActive,
+                  ]}
+                >
                   {item.label}
                 </Text>
               </TouchableOpacity>
@@ -134,9 +142,32 @@ export default function AlertsScreen() {
         {/* Alerts List */}
         <View style={styles.alertsList}>
           {filteredAlerts.map((item) => (
-            <TouchableOpacity key={item.id} style={styles.alertCard} activeOpacity={0.7}>
+            <TouchableOpacity
+              key={item.id}
+              style={[
+                styles.alertCard,
+                {
+                  backgroundColor: themeColors.card,
+                  borderColor: themeColors.cardBorder,
+                },
+              ]}
+              activeOpacity={0.7}
+            >
               {/* Category Colored Icon Badge */}
-              <View style={[styles.alertIconBadge, { backgroundColor: item.badgeBg || '#F8FAF9' }]}>
+              <View
+                style={[
+                  styles.alertIconBadge,
+                  {
+                    backgroundColor: isDark
+                      ? item.category === 'critical'
+                        ? 'rgba(239, 68, 68, 0.18)'
+                        : item.category === 'warning'
+                        ? 'rgba(245, 158, 11, 0.18)'
+                        : 'rgba(56, 189, 248, 0.18)'
+                      : item.badgeBg || '#F8FAF9',
+                  },
+                ]}
+              >
                 <Ionicons name={item.icon as any} size={20} color={item.iconColor || '#00C48C'} />
               </View>
 
@@ -145,18 +176,19 @@ export default function AlertsScreen() {
                   <Text
                     style={[
                       styles.alertTitle,
+                      { color: themeColors.text },
                       item.category === 'critical' && { color: '#EF4444' },
-                      item.category === 'warning' && { color: '#D97706' },
+                      item.category === 'warning' && { color: '#F59E0B' },
                     ]}
                   >
                     {item.title}
                   </Text>
                 </View>
-                <Text style={styles.alertTime}>{item.time}</Text>
-                <Text style={styles.alertDesc}>{item.description}</Text>
+                <Text style={[styles.alertTime, { color: themeColors.textMuted }]}>{item.time}</Text>
+                <Text style={[styles.alertDesc, { color: themeColors.textSecondary }]}>{item.description}</Text>
               </View>
 
-              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+              <Ionicons name="chevron-forward" size={18} color={themeColors.textMuted} />
             </TouchableOpacity>
           ))}
         </View>
@@ -170,7 +202,6 @@ export default function AlertsScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#EDF5F1',
   },
   container: {
     flex: 1,
@@ -188,18 +219,15 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
   },
 
   // Filter Pills
   filtersWrapper: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 4,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E5E9E7',
   },
   filterPill: {
     flex: 1,
@@ -214,10 +242,8 @@ const styles = StyleSheet.create({
   filterText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#64748B',
   },
   filterTextActive: {
-    color: '#FFFFFF',
     fontWeight: '700',
   },
 
@@ -226,19 +252,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   alertCard: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 10,
     elevation: 2,
     borderWidth: 1,
-    borderColor: '#E5E9E7',
   },
   alertIconBadge: {
     width: 44,
@@ -258,17 +278,14 @@ const styles = StyleSheet.create({
   alertTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#111827',
   },
   alertTime: {
     fontSize: 11,
-    color: '#94A3B8',
     marginTop: 2,
     marginBottom: 4,
   },
   alertDesc: {
     fontSize: 12,
-    color: '#64748B',
     lineHeight: 17,
   },
 });

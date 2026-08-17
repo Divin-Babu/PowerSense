@@ -70,6 +70,7 @@ const initialSinglePlug: SinglePlugData = {
 };
 
 const initialAppState: AppState = {
+  theme: 'light',
   isLoggedIn: false,
   currentScreen: 'dashboard',
   user: {

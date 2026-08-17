@@ -49,7 +49,7 @@ const APPLIANCE_PRESETS = [
 
 export default function BleProvisionScreen() {
   const router = useRouter();
-  const { state } = useStore();
+  const { state, isDark, themeColors } = useStore();
 
   const [step, setStep] = useState<ProvisionStep>('start');
   const [selectedBle, setSelectedBle] = useState<BleDevice | null>(null);
@@ -62,6 +62,8 @@ export default function BleProvisionScreen() {
   // Appliance details
   const [applianceName, setApplianceName] = useState('Refrigerator');
   const [applianceCategory, setApplianceCategory] = useState('Kitchen');
+  const [ratedPower, setRatedPower] = useState('180');
+  const [isRegistering, setIsRegistering] = useState(false);
   const [discoveredDevices, setDiscoveredDevices] = useState<BleDevice[]>(SAMPLE_BLE_DEVICES);
   const [hardwareDetectedType, setHardwareDetectedType] = useState<string>('Scanning...');
 
@@ -102,7 +104,7 @@ export default function BleProvisionScreen() {
     try {
       const res = await fetch('http://localhost:8000/api/telemetry/live');
       if (res.ok) {
-        const liveData = await res.json();
+        const liveData: any = await res.json();
         if (liveData && liveData.connected && liveData.device_id) {
           const netNode: BleDevice = {
             id: liveData.device_id,
