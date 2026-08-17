@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "PowerSense AI",
+    "slug": "powersense-ai",
+    "version": "1.0.0",
+    "scheme": "powersense",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#07090E"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#07090E"
+      },
+      "package": "com.powersense.ai"
+    },
+    "ios": {
+      "bundleIdentifier": "com.powersense.ai",
+      "supportsTablet": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

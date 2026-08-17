@@ -1,0 +1,80 @@
+@layer utilities {
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    user-select: none;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   POWERSENSE DESIGN SYSTEM & EMERALD/MINT CORE PALETTE
+   ───────────────────────────────────────────────────────────── */
+:root {
+  --color-primary: #00C48C;
+  --color-primary-dark: #009668;
+  --color-primary-light: #E8FBF4;
+  --color-bg: #EDF5F1;
+  --color-card: #FFFFFF;
+  --color-text: #111827;
+  --color-text-secondary: #64748B;
+  --color-border: #DCE8E2;
+}
+
+/* Base Body Background */
+body {
+  background-color: #EDF5F1;
+  color: #111827;
+  font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif;
+  overflow-x: hidden;
+}
+
+#app, #root {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* Pristine Cards & Glass */
+.clean-card {
+  background: #FFFFFF;
+  border-radius: 1.5rem;
+  border: 1px solid #E5E9E7;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03);
+  transition: all 0.2s ease;
+}
+
+.clean-card:hover {
+  box-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.06);
+}
+
+.emerald-gradient-card {
+  background: linear-gradient(135deg, #00D589 0%, #009E69 100%);
+  color: #FFFFFF;
+  border-radius: 1.75rem;
+  box-shadow: 0 10px 25px -5px rgba(0, 213, 137, 0.3);
+}
+
+/* Micro-animations */
+@keyframes pulse-subtle {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.03); opacity: 0.9; }
+}
+
+.pulse-active {
+  animation: pulse-subtle 2s infinite ease-in-out;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}

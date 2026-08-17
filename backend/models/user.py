@@ -1,0 +1,33 @@
+from datetime import datetime
+from sqlalchemy import Column, BigInteger, String, DateTime
+from database import Base
+
+class User(Base):
+    __tablename__ = 'tbl_user'
+
+    user_id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
+    name = Column(String(255), nullable=True)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    role = Column(String(50), default="user", nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=True)
+
+    # Backward compatibility property aliases
+    @property
+    def id(self):
+        return self.user_id
+
+    @property
+    def password(self):
+        return self.password_hash
+
+    def to_dict(self):
+        created_val = getattr(self, "created_at", None)
+        return {
+            "id": self.user_id,
+            "user_id": self.user_id,
+            "name": self.name or "User",
+            "email": self.email,
+            "role": self.role or "user",
+            "created_at": created_val.isoformat() if isinstance(created_val, datetime) else None
+        }
