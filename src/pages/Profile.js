@@ -34,43 +34,12 @@ export function Profile() {
         </button>
       </section>
 
-      <!-- Appearance & Theme Mode Section -->
-      <section class="glass-card rounded-xl p-lg border border-outline-variant space-y-md">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-sm">
-            <span class="material-symbols-outlined text-primary">${isDark ? 'dark_mode' : 'light_mode'}</span>
-            <div>
-              <h3 class="font-headline-md text-headline-md text-on-surface">App Theme & Appearance</h3>
-              <p class="text-xs text-on-surface-variant">Switch between Dark Mode and White Mode. Persists across sessions.</p>
-            </div>
-          </div>
-          <button id="theme-toggle-profile-btn" class="px-md py-sm bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 rounded-xl font-label-sm font-bold transition-all flex items-center gap-xs">
-            <span class="material-symbols-outlined text-[18px]">${isDark ? 'light_mode' : 'dark_mode'}</span>
-            <span>Switch to ${isDark ? 'White Mode' : 'Dark Mode'}</span>
-          </button>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-md pt-2">
-          <button id="set-light-mode-btn" class="p-md rounded-xl border ${!isDark ? 'border-primary bg-primary/10 ring-2 ring-primary/20' : 'border-outline-variant bg-surface-container-lowest'} flex items-center gap-md text-left transition-all">
-            <div class="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center">
-              <span class="material-symbols-outlined">light_mode</span>
-            </div>
-            <div>
-              <span class="font-bold text-sm text-on-surface block">White Mode</span>
-              <span class="text-xs text-on-surface-variant">Clean mint background & crisp cards</span>
-            </div>
-          </button>
-
-          <button id="set-dark-mode-btn" class="p-md rounded-xl border ${isDark ? 'border-primary bg-primary/10 ring-2 ring-primary/20' : 'border-outline-variant bg-surface-container-lowest'} flex items-center gap-md text-left transition-all">
-            <div class="w-10 h-10 rounded-lg bg-sky-100 dark:bg-sky-950/40 text-sky-500 flex items-center justify-center">
-              <span class="material-symbols-outlined">dark_mode</span>
-            </div>
-            <div>
-              <span class="font-bold text-sm text-on-surface block">Dark Mode</span>
-              <span class="text-xs text-on-surface-variant">Deep obsidian space void aesthetic</span>
-            </div>
-          </button>
-        </div>
+      <!-- Theme Mode Toggle Row -->
+      <section class="glass-card rounded-2xl p-lg border border-outline-variant flex items-center justify-between">
+        <span class="font-bold text-base text-on-surface">${isDark ? 'Dark Mode' : 'White Mode'}</span>
+        <button id="theme-toggle-profile-btn" class="relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${isDark ? 'bg-primary' : 'bg-slate-300'}" title="Switch Mode">
+          <span class="inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform ${isDark ? 'translate-x-6' : 'translate-x-1'}"></span>
+        </button>
       </section>
 
       <!-- Hardware Node Settings -->
@@ -135,20 +104,6 @@ export function bindProfileEvents() {
   if (btnToggle) {
     btnToggle.addEventListener('click', () => {
       store.toggleTheme();
-    });
-  }
-
-  const btnLight = document.getElementById('set-light-mode-btn');
-  if (btnLight) {
-    btnLight.addEventListener('click', () => {
-      store.setTheme('light');
-    });
-  }
-
-  const btnDark = document.getElementById('set-dark-mode-btn');
-  if (btnDark) {
-    btnDark.addEventListener('click', () => {
-      store.setTheme('dark');
     });
   }
 }

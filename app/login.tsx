@@ -79,7 +79,7 @@ export default function LoginScreen() {
           <View style={styles.headerSection}>
             <TouchableOpacity
               onPress={toggleTheme}
-              activeOpacity={0.75}
+              activeOpacity={0.8}
               style={[
                 styles.logoBadge,
                 {
@@ -88,16 +88,8 @@ export default function LoginScreen() {
                 },
               ]}
               accessibilityLabel="Toggle Dark and White Mode"
-              accessibilityHint="Tap to switch between dark and light themes"
             >
               <Ionicons name="flash" size={36} color="#00C48C" />
-              <View style={[styles.modeIndicatorBadge, { backgroundColor: isDark ? '#1F2937' : '#FFFFFF', borderColor: isDark ? '#374151' : '#E2E8F0' }]}>
-                <Ionicons
-                  name={isDark ? 'moon' : 'sunny'}
-                  size={12}
-                  color={isDark ? '#38BDF8' : '#F59E0B'}
-                />
-              </View>
             </TouchableOpacity>
 
             <Text style={[styles.appTitle, { color: themeColors.text }]}>
@@ -106,11 +98,6 @@ export default function LoginScreen() {
             <Text style={[styles.appSubtitle, { color: themeColors.textSecondary }]}>
               Smart Energy, Smarter You
             </Text>
-            <TouchableOpacity onPress={toggleTheme} style={styles.themeHintBtn}>
-              <Text style={[styles.themeHintText, { color: themeColors.textMuted }]}>
-                Tap ⚡ for {isDark ? 'White Mode ☀️' : 'Dark Mode 🌙'}
-              </Text>
-            </TouchableOpacity>
           </View>
 
           {/* Form Card */}
@@ -126,7 +113,6 @@ export default function LoginScreen() {
           >
             <Text style={[styles.cardTitle, { color: themeColors.text }]}>Welcome Back</Text>
             <Text style={[styles.cardSubtitle, { color: themeColors.textSecondary }]}>
-              Sign in to monitor and control your smart plug
             </Text>
 
             {errorMessage ? (

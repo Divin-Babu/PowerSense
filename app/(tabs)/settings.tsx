@@ -109,62 +109,18 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Appearance & Theme Toggle Section */}
-        <Text style={[styles.sectionHeader, { color: themeColors.textSecondary }]}>APPEARANCE & THEME</Text>
+        {/* Theme Toggle Row */}
         <View style={[styles.themeCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
           <View style={styles.themeRow}>
-            <View style={[styles.themeIconBadge, { backgroundColor: isDark ? 'rgba(56, 189, 248, 0.15)' : '#FEF3C7' }]}>
-              <Ionicons
-                name={isDark ? 'moon' : 'sunny'}
-                size={22}
-                color={isDark ? '#38BDF8' : '#F59E0B'}
-              />
-            </View>
-            <View style={styles.themeDetails}>
-              <Text style={[styles.themeTitle, { color: themeColors.text }]}>
-                {isDark ? 'Dark Mode' : 'White Mode'}
-              </Text>
-              <Text style={[styles.themeSub, { color: themeColors.textSecondary }]}>
-                {isDark ? 'Using dark surfaces and sleek obsidian theme' : 'Using crisp bright white and soft mint theme'}
-              </Text>
-            </View>
+            <Text style={[styles.themeTitle, { color: themeColors.text }]}>
+              {isDark ? 'Dark Mode' : 'White Mode'}
+            </Text>
             <Switch
               value={isDark}
               onValueChange={toggleTheme}
               trackColor={{ false: '#CBD5E1', true: '#00C48C' }}
-              thumbColor={isDark ? '#FFFFFF' : '#FFFFFF'}
+              thumbColor="#FFFFFF"
             />
-          </View>
-
-          {/* Quick theme selector buttons */}
-          <View style={styles.themeQuickRow}>
-            <TouchableOpacity
-              onPress={() => setTheme('light')}
-              style={[
-                styles.themeChoiceBtn,
-                !isDark && styles.themeChoiceActiveLight,
-                { borderColor: !isDark ? '#00C48C' : themeColors.subCardBorder, backgroundColor: !isDark ? '#E8FBF4' : themeColors.subCardBg },
-              ]}
-            >
-              <Ionicons name="sunny" size={16} color={!isDark ? '#009668' : themeColors.textMuted} />
-              <Text style={[styles.themeChoiceText, { color: !isDark ? '#009668' : themeColors.textSecondary, fontWeight: !isDark ? '700' : '500' }]}>
-                White Mode
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => setTheme('dark')}
-              style={[
-                styles.themeChoiceBtn,
-                isDark && styles.themeChoiceActiveDark,
-                { borderColor: isDark ? '#00C48C' : themeColors.subCardBorder, backgroundColor: isDark ? 'rgba(0, 196, 140, 0.15)' : themeColors.subCardBg },
-              ]}
-            >
-              <Ionicons name="moon" size={16} color={isDark ? '#00C48C' : themeColors.textMuted} />
-              <Text style={[styles.themeChoiceText, { color: isDark ? '#00C48C' : themeColors.textSecondary, fontWeight: isDark ? '700' : '500' }]}>
-                Dark Mode
-              </Text>
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -381,61 +337,21 @@ const styles = StyleSheet.create({
 
   // Appearance & Theme Card
   themeCard: {
-    borderRadius: 20,
-    padding: 16,
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
     borderWidth: 1,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8,
+    marginBottom: 16,
     elevation: 2,
   },
   themeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
-  themeIconBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  themeDetails: {
-    flex: 1,
+    justifyContent: 'space-between',
   },
   themeTitle: {
     fontSize: 15,
     fontWeight: '700',
-  },
-  themeSub: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  themeQuickRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 14,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(150, 150, 150, 0.1)',
-  },
-  themeChoiceBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 9,
-    borderRadius: 12,
-    borderWidth: 1.5,
-  },
-  themeChoiceActiveLight: {},
-  themeChoiceActiveDark: {},
-  themeChoiceText: {
-    fontSize: 12,
   },
 
   // Featured Card

@@ -159,7 +159,7 @@ export default function RegisterScreen() {
           <View style={styles.headerSection}>
             <TouchableOpacity
               onPress={toggleTheme}
-              activeOpacity={0.75}
+              activeOpacity={0.8}
               style={[
                 styles.logoBadge,
                 {
@@ -168,24 +168,8 @@ export default function RegisterScreen() {
                 },
               ]}
               accessibilityLabel="Toggle Dark and White Mode"
-              accessibilityHint="Tap to switch between dark and light themes"
             >
               <Ionicons name="flash" size={36} color="#00C48C" />
-              <View
-                style={[
-                  styles.modeIndicatorBadge,
-                  {
-                    backgroundColor: isDark ? '#1F2937' : '#FFFFFF',
-                    borderColor: isDark ? '#374151' : '#E2E8F0',
-                  },
-                ]}
-              >
-                <Ionicons
-                  name={isDark ? 'moon' : 'sunny'}
-                  size={12}
-                  color={isDark ? '#38BDF8' : '#F59E0B'}
-                />
-              </View>
             </TouchableOpacity>
 
             <Text style={[styles.appTitle, { color: themeColors.text }]}>
@@ -194,11 +178,6 @@ export default function RegisterScreen() {
             <Text style={[styles.appSubtitle, { color: themeColors.textSecondary }]}>
               Smart Energy, Smarter You
             </Text>
-            <TouchableOpacity onPress={toggleTheme} style={styles.themeHintBtn}>
-              <Text style={[styles.themeHintText, { color: themeColors.textMuted }]}>
-                Tap ⚡ for {isDark ? 'White Mode ☀️' : 'Dark Mode 🌙'}
-              </Text>
-            </TouchableOpacity>
           </View>
 
           {/* Registration Card */}
@@ -213,7 +192,6 @@ export default function RegisterScreen() {
           >
             <Text style={[styles.cardTitle, { color: themeColors.text }]}>Create Account</Text>
             <Text style={[styles.cardSubtitle, { color: themeColors.textSecondary }]}>
-              Join PowerSense to monitor and optimize your consumption
             </Text>
 
             {errorMessage ? (
@@ -250,8 +228,6 @@ export default function RegisterScreen() {
                 />
                 <TextInput
                   style={[styles.input, { color: themeColors.text }]}
-                  placeholder="e.g. Divin Babu"
-                  placeholderTextColor={themeColors.textMuted}
                   value={fullName}
                   onChangeText={setFullName}
                 />
@@ -285,8 +261,7 @@ export default function RegisterScreen() {
                 />
                 <TextInput
                   style={[styles.input, { color: themeColors.text }]}
-                  placeholder="10-digit mobile number"
-                  placeholderTextColor={themeColors.textMuted}
+
                   value={phone}
                   onChangeText={handlePhoneChange}
                   keyboardType="number-pad"
@@ -322,8 +297,6 @@ export default function RegisterScreen() {
                 />
                 <TextInput
                   style={[styles.input, { color: themeColors.text }]}
-                  placeholder="name@example.com"
-                  placeholderTextColor={themeColors.textMuted}
                   value={email}
                   onChangeText={handleEmailChange}
                   autoCapitalize="none"
@@ -352,8 +325,6 @@ export default function RegisterScreen() {
                 />
                 <TextInput
                   style={[styles.input, { color: themeColors.text }]}
-                  placeholder="Min. 6 characters"
-                  placeholderTextColor={themeColors.textMuted}
                   secureTextEntry={!showPassword}
                   value={password}
                   onChangeText={setPassword}
@@ -413,8 +384,6 @@ export default function RegisterScreen() {
                 />
                 <TextInput
                   style={[styles.input, { color: themeColors.text }]}
-                  placeholder="Repeat your password"
-                  placeholderTextColor={themeColors.textMuted}
                   secureTextEntry={!showPassword}
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}

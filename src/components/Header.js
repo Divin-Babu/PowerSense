@@ -5,7 +5,6 @@ import { store } from '../state/store.js';
 export function Header() {
   const state = store.getState();
   const isAnomaly = state.simulatedAnomalyActive;
-  const isDark = state.theme === 'dark';
   const user = state.user || { name: 'User', email: 'user@powersense.ai', role: 'user' };
   const isAdmin = user.role === 'admin';
 
@@ -19,13 +18,6 @@ export function Header() {
       </div>
 
       <div class="flex items-center gap-sm md:gap-md">
-        <!-- Theme Mode Toggle Button -->
-        <button id="btn-header-theme-toggle" class="p-2 rounded-xl bg-surface-container-high dark:bg-[#1A2330] hover:bg-surface-variant dark:hover:bg-[#253243] border border-outline-variant dark:border-[#253243] text-on-surface transition-all flex items-center justify-center" title="Toggle Dark/White Mode (${isDark ? 'Currently Dark' : 'Currently White'})">
-          <span class="material-symbols-outlined text-[20px] ${isDark ? 'text-amber-400' : 'text-slate-600'}">
-            ${isDark ? 'light_mode' : 'dark_mode'}
-          </span>
-        </button>
-
         <!-- User Session Indicator -->
         <div id="header-user-badge" class="flex items-center gap-xs px-sm py-1 rounded-xl bg-surface-container-high dark:bg-[#1A2330] border border-outline-variant dark:border-[#253243] cursor-pointer hover:border-cyber-cyan transition-all" title="Logged in as ${user.email}">
           <div class="w-6 h-6 rounded-lg ${isAdmin ? 'bg-cyber-emerald/20 text-cyber-emerald border border-cyber-emerald/40' : 'bg-cyber-cyan/20 text-cyber-cyan border border-cyber-cyan/40'} flex items-center justify-center font-mono text-[11px] font-bold">
@@ -73,13 +65,6 @@ export function bindHeaderEvents() {
     logo.addEventListener('click', () => {
       const state = store.getState();
       store.setPage(state.user?.role === 'admin' ? 'admin' : 'dashboard');
-    });
-  }
-
-  const btnThemeToggle = document.getElementById('btn-header-theme-toggle');
-  if (btnThemeToggle) {
-    btnThemeToggle.addEventListener('click', () => {
-      store.toggleTheme();
     });
   }
 

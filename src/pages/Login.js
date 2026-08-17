@@ -12,11 +12,8 @@ export function Login() {
       <div class="w-full max-w-md relative z-10">
         <!-- Branding Header & Theme Toggle Logo -->
         <div class="flex flex-col items-center mb-xl text-center">
-          <div class="mb-md flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 shadow-md cursor-pointer hover:scale-105 transition-all relative group" id="theme-toggle-logo" title="Click to toggle Dark / White Mode">
+          <div class="mb-md flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 shadow-md cursor-pointer hover:scale-105 transition-all" id="theme-toggle-logo">
             <span class="material-symbols-outlined text-[#00C48C] text-[36px] leading-none" style="font-variation-settings: 'FILL' 1;">bolt</span>
-            <span class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-[10px] text-amber-500 dark:text-sky-400 shadow-sm">
-              <span class="material-symbols-outlined text-[13px]">${isDark ? 'dark_mode' : 'light_mode'}</span>
-            </span>
           </div>
           <h1 class="font-headline-lg text-2xl font-extrabold text-[#111827] dark:text-slate-100 mb-1 tracking-wide">
             Power <span class="text-[#00C48C]">Sense</span>
@@ -24,9 +21,6 @@ export function Login() {
           <p class="text-sm font-medium text-[#64748B] dark:text-slate-400">
             Smart Energy, Smarter You
           </p>
-          <button id="theme-hint-btn" class="mt-1 text-[11px] font-medium text-[#94A3B8] hover:text-[#00C48C] transition-colors">
-            Tap ⚡ for ${isDark ? 'White Mode ☀️' : 'Dark Mode 🌙'}
-          </button>
         </div>
 
         <!-- Login Form Card -->
@@ -98,13 +92,6 @@ export function bindLoginEvents() {
   const themeToggleLogo = document.getElementById('theme-toggle-logo');
   if (themeToggleLogo) {
     themeToggleLogo.addEventListener('click', () => {
-      store.toggleTheme();
-    });
-  }
-
-  const themeHintBtn = document.getElementById('theme-hint-btn');
-  if (themeHintBtn) {
-    themeHintBtn.addEventListener('click', () => {
       store.toggleTheme();
     });
   }

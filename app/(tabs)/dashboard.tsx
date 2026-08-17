@@ -93,9 +93,7 @@ export default function DashboardScreen() {
         {/* Top Header */}
         <View style={styles.header}>
           <View style={styles.brandRow}>
-            <TouchableOpacity
-              onPress={toggleTheme}
-              activeOpacity={0.75}
+            <View
               style={[
                 styles.logoBadge,
                 {
@@ -103,11 +101,9 @@ export default function DashboardScreen() {
                   borderColor: themeColors.logoBadgeBorder,
                 },
               ]}
-              accessibilityLabel="Toggle Theme Mode"
             >
               <Ionicons name="flash" size={24} color="#00C48C" />
-              <View style={[styles.headerModeDot, { backgroundColor: isDark ? '#38BDF8' : '#F59E0B' }]} />
-            </TouchableOpacity>
+            </View>
             <View>
               <Text style={[styles.brandTitle, { color: themeColors.text }]}>
                 Power<Text style={{ color: '#00C48C' }}>Sense</Text>
@@ -117,25 +113,6 @@ export default function DashboardScreen() {
           </View>
 
           <View style={styles.headerActions}>
-            <TouchableOpacity
-              style={[
-                styles.themeHeaderBtn,
-                {
-                  backgroundColor: themeColors.card,
-                  borderColor: themeColors.cardBorder,
-                },
-              ]}
-              onPress={toggleTheme}
-              activeOpacity={0.7}
-              accessibilityLabel={`Switch to ${isDark ? 'White' : 'Dark'} Mode`}
-            >
-              <Ionicons
-                name={isDark ? 'sunny' : 'moon'}
-                size={20}
-                color={isDark ? '#FBBF24' : '#64748B'}
-              />
-            </TouchableOpacity>
-
             <TouchableOpacity
               style={[
                 styles.bellBtn,
