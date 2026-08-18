@@ -108,7 +108,7 @@ interface StoreContextType {
   dismissAlert: (id: string) => void;
   login: (email: string, name?: string, role?: string, phone?: string) => void;
   registerUser: (name: string, email: string, phone?: string) => void;
-  updateUserProfile: (updatedData: { name?: string; phone?: string }) => void;
+  updateUserProfile: (updatedData: { name?: string; full_name?: string; phone?: string }) => void;
   logout: () => void;
 }
 

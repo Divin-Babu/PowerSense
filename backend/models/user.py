@@ -8,6 +8,7 @@ class User(Base):
     user_id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
     full_name = Column(String(255), nullable=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
+    phone = Column(String(50), nullable=True)
     password_hash = Column(String(255), nullable=False)
     role = Column(String(50), default="user", nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=True)
@@ -38,6 +39,7 @@ class User(Base):
             "full_name": disp_name,
             "name": disp_name,
             "email": self.email,
+            "phone": self.phone,
             "role": self.role or "user",
             "created_at": created_val.isoformat() if isinstance(created_val, datetime) else None
         }

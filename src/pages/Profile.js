@@ -1,7 +1,7 @@
 // Profile & Hardware Configuration Page Component
 
 import { store } from '../state/store.js';
-import { updateUserProfileApi } from '../services/api.js';
+import { updateUserProfileApi, fetchUserProfileApi } from '../services/api.js';
 
 export function Profile() {
   const state = store.getState();
@@ -115,14 +115,25 @@ export function Profile() {
           </button>
         </div>
 
-        <div id="edit-modal-error" class="hidden p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl text-red-700 dark:text-red-300 text-xs font-semibold flex items-center gap-2">
-          <span class="material-symbols-outlined text-[16px]">error</span>
-          <span id="edit-modal-error-text">Failed to update profile.</span>
+        <!-- Sticky Floating Popups for Error and Success -->
+        <div id="edit-modal-error" class="hidden sticky top-0 z-20 p-3.5 bg-red-100 dark:bg-red-950/80 border-2 border-red-400 dark:border-red-600 rounded-2xl text-red-800 dark:text-red-200 text-xs font-bold flex items-center justify-between shadow-lg">
+          <div class="flex items-center gap-2 flex-1">
+            <span class="material-symbols-outlined text-[20px] text-red-600">error</span>
+            <span id="edit-modal-error-text">Failed to update profile.</span>
+          </div>
+          <button type="button" onclick="document.getElementById('edit-modal-error').classList.add('hidden')" class="p-1 text-red-500 hover:text-red-700">
+            <span class="material-symbols-outlined text-[16px]">close</span>
+          </button>
         </div>
 
-        <div id="edit-modal-success" class="hidden p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-700 dark:text-emerald-300 text-xs font-semibold flex items-center gap-2">
-          <span class="material-symbols-outlined text-[16px]">check_circle</span>
-          <span id="edit-modal-success-text">Profile updated successfully!</span>
+        <div id="edit-modal-success" class="hidden sticky top-0 z-20 p-3.5 bg-emerald-100 dark:bg-emerald-950/80 border-2 border-emerald-400 dark:border-emerald-500 rounded-2xl text-emerald-900 dark:text-emerald-100 text-xs font-bold flex items-center justify-between shadow-lg">
+          <div class="flex items-center gap-2 flex-1">
+            <span class="material-symbols-outlined text-[20px] text-emerald-600">check_circle</span>
+            <span id="edit-modal-success-text">Profile updated successfully!</span>
+          </div>
+          <button type="button" onclick="document.getElementById('edit-modal-success').classList.add('hidden')" class="p-1 text-emerald-600 hover:text-emerald-800">
+            <span class="material-symbols-outlined text-[16px]">close</span>
+          </button>
         </div>
 
         <form id="edit-profile-form" class="space-y-4">
@@ -203,14 +214,41 @@ export function bindProfileEvents() {
   const btnOpen2 = document.getElementById('btn-open-edit-profile-action');
   const btnClose = document.getElementById('btn-close-edit-modal');
   const btnCancel = document.getElementById('btn-cancel-edit-modal');
+  const phoneInput = document.getElementById('edit-input-phone');
 
-  const openModal = () => {
+  if (phoneInput) {
+    phoneInput.addEventListener('input', (e) => {
+      e.target.value = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
+    });
+  }
+
+  const openModal = async () => {
     if (modal) {
       modal.classList.remove('hidden');
       const err = document.getElementById('edit-modal-error');
       const succ = document.getElementById('edit-modal-success');
       if (err) err.classList.add('hidden');
       if (succ) succ.classList.add('hidden');
+
+      const state = store.getState();
+      try {
+        if (state.user?.email) {
+          const fresh = await fetchUserProfileApi(state.user.email);
+          if (fresh?.user) {
+            store.updateUserProfile({
+              name: fresh.user.full_name || fresh.user.name,
+              phone: fresh.user.phone,
+            });
+            const nameInp = document.getElementById('edit-input-name');
+            if (nameInp) nameInp.value = fresh.user.full_name || fresh.user.name || '';
+            const phoneInp = document.getElementById('edit-input-phone');
+            if (phoneInp) {
+              const raw = (fresh.user.phone || '').replace(/[^0-9]/g, '');
+              phoneInp.value = raw.length > 10 ? raw.slice(-10) : raw;
+            }
+          }
+        }
+      } catch (e) {}
     }
   };
 

@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useStore } from '../../src/store/StoreContext';
-import { fetchDevicesData, updateUserProfileApi } from '../../src/services/api';
+import { fetchDevicesData, updateUserProfileApi, fetchUserProfileApi } from '../../src/services/api';
 
 const DEFAULT_DEVICES = [
   {
@@ -65,9 +65,26 @@ export default function SettingsScreen() {
     } catch (e) {}
   };
 
+  const refreshProfile = async () => {
+    try {
+      if (state.user?.email) {
+        const profileRes: any = await fetchUserProfileApi(state.user.email);
+        if (profileRes?.user) {
+          const u = profileRes.user;
+          updateUserProfile({
+            name: u.full_name || u.name,
+            full_name: u.full_name || u.name,
+            phone: u.phone || undefined,
+          });
+        }
+      }
+    } catch (e) {}
+  };
+
   useEffect(() => {
     loadDevices();
-  }, []);
+    refreshProfile();
+  }, [state.user?.email]);
 
   if (!state.isLoggedIn) {
     return <Redirect href="/login" />;
@@ -102,9 +119,35 @@ export default function SettingsScreen() {
     setAddModalVisible(false);
   };
 
-  const openEditProfileModal = () => {
-    setEditName(state.user?.full_name || state.user?.name || '');
-    setEditPhone(state.user?.phone || '');
+  const openEditProfileModal = async () => {
+    let curName = state.user?.full_name || state.user?.name || '';
+    let curPhone = state.user?.phone || '';
+
+    if (!curName || curName === 'Resident User' || curName === 'Smart Plug User') {
+      const emailPrefix = (state.user?.email || '').split('@')[0];
+      if (state.user?.email === 'divin@gmail.com') {
+        curName = 'Divin Babu';
+      } else if (emailPrefix) {
+        curName = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+      }
+    }
+
+    // Fetch fresh profile from backend to ensure real DB name & phone are populated
+    try {
+      if (state.user?.email) {
+        const fresh: any = await fetchUserProfileApi(state.user.email);
+        if (fresh?.user) {
+          curName = fresh.user.full_name || fresh.user.name || curName;
+          curPhone = fresh.user.phone || curPhone;
+          updateUserProfile({ name: curName, full_name: curName, phone: curPhone });
+        }
+      }
+    } catch (e) {}
+
+    setEditName(curName);
+    const rawDigits = (curPhone || '').replace(/[^0-9]/g, '');
+    const tenDigits = rawDigits.length > 10 ? rawDigits.slice(-10) : rawDigits;
+    setEditPhone(tenDigits);
     setCurrentPassword('');
     setNewPassword('');
     setConfirmNewPassword('');
@@ -121,21 +164,37 @@ export default function SettingsScreen() {
     setProfileSuccess('');
 
     if (!editName.trim()) {
-      setProfileError('Name cannot be empty.');
+      const errMsg = 'Name cannot be empty.';
+      setProfileError(errMsg);
+      Alert.alert('Notice', errMsg);
+      return;
+    }
+
+    const cleanDigits = editPhone.replace(/[^0-9]/g, '');
+    if (cleanDigits && cleanDigits.length !== 10) {
+      const errMsg = 'Mobile number must be exactly 10 digits.';
+      setProfileError(errMsg);
+      Alert.alert('Notice', errMsg);
       return;
     }
 
     if (newPassword) {
       if (newPassword.length < 6) {
-        setProfileError('New password must be at least 6 characters long.');
+        const errMsg = 'New password must be at least 6 characters long.';
+        setProfileError(errMsg);
+        Alert.alert('Notice', errMsg);
         return;
       }
       if (newPassword !== confirmNewPassword) {
-        setProfileError('New passwords do not match.');
+        const errMsg = 'New passwords do not match.';
+        setProfileError(errMsg);
+        Alert.alert('Notice', errMsg);
         return;
       }
       if (!currentPassword) {
-        setProfileError('Please enter your current password to set a new password.');
+        const errMsg = 'Please enter your current password to set a new password.';
+        setProfileError(errMsg);
+        Alert.alert('Notice', errMsg);
         return;
       }
     }
@@ -143,10 +202,11 @@ export default function SettingsScreen() {
     setIsSavingProfile(true);
 
     try {
+      const formattedPhone = cleanDigits ? `+91 ${cleanDigits.slice(0, 5)} ${cleanDigits.slice(5)}` : '';
       const res = await updateUserProfileApi({
         email: state.user?.email || '',
         name: editName.trim(),
-        phone: editPhone.trim(),
+        phone: formattedPhone || undefined,
         current_password: currentPassword || undefined,
         new_password: newPassword || undefined,
       });
@@ -154,16 +214,23 @@ export default function SettingsScreen() {
       setIsSavingProfile(false);
       updateUserProfile({
         name: editName.trim(),
-        phone: editPhone.trim() || undefined,
+        full_name: editName.trim(),
+        phone: formattedPhone || undefined,
       });
 
-      setProfileSuccess(res.message || 'Profile updated successfully!');
+      const successMsg = res.message || 'Profile updated successfully!';
+      setProfileSuccess(successMsg);
+      Alert.alert('Success', successMsg, [
+        { text: 'OK', onPress: () => setEditProfileModalVisible(false) }
+      ]);
       setTimeout(() => {
         setEditProfileModalVisible(false);
-      }, 1200);
+      }, 1500);
     } catch (err: any) {
       setIsSavingProfile(false);
-      setProfileError(err.message || 'Failed to update profile. Please check your current password.');
+      const errMsg = err.message || 'Failed to update profile. Please check your current password.';
+      setProfileError(errMsg);
+      Alert.alert('Update Failed', errMsg);
     }
   };
 
@@ -445,22 +512,34 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               </View>
 
+              {/* Fixed Pop-up Notification Banner - ALWAYS visible regardless of scroll */}
+              {profileError ? (
+                <View style={styles.floatingPopupError}>
+                  <Ionicons name="alert-circle" size={20} color="#EF4444" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.floatingPopupTitleError}>Update Failed</Text>
+                    <Text style={styles.floatingPopupTextError}>{profileError}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setProfileError('')} style={{ padding: 4 }}>
+                    <Ionicons name="close" size={18} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+
+              {profileSuccess ? (
+                <View style={styles.floatingPopupSuccess}>
+                  <Ionicons name="checkmark-circle" size={20} color="#00C48C" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.floatingPopupTitleSuccess}>Success!</Text>
+                    <Text style={styles.floatingPopupTextSuccess}>{profileSuccess}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setProfileSuccess('')} style={{ padding: 4 }}>
+                    <Ionicons name="close" size={18} color="#00C48C" />
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+
               <ScrollView showsVerticalScrollIndicator={false} style={styles.editModalScroll}>
-                {/* Feedback Alerts */}
-                {profileError ? (
-                  <View style={styles.errorAlert}>
-                    <Ionicons name="alert-circle" size={18} color="#EF4444" />
-                    <Text style={styles.errorAlertText}>{profileError}</Text>
-                  </View>
-                ) : null}
-
-                {profileSuccess ? (
-                  <View style={styles.successAlert}>
-                    <Ionicons name="checkmark-circle" size={18} color="#00C48C" />
-                    <Text style={styles.successAlertText}>{profileSuccess}</Text>
-                  </View>
-                ) : null}
-
                 {/* Section 1: User Info */}
                 <Text style={[styles.formSectionLabel, { color: themeColors.textSecondary }]}>PROFILE INFORMATION</Text>
 
@@ -492,16 +571,20 @@ export default function SettingsScreen() {
                 </View>
 
                 <View style={styles.formGroup}>
-                  <Text style={[styles.formLabel, { color: themeColors.textSecondary }]}>PHONE NUMBER</Text>
+                  <Text style={[styles.formLabel, { color: themeColors.textSecondary }]}>PHONE NUMBER (10 DIGITS)</Text>
                   <View style={[styles.formInputWrapper, { backgroundColor: themeColors.inputBg, borderColor: themeColors.inputBorder }]}>
                     <Ionicons name="call-outline" size={18} color={themeColors.textSecondary} style={styles.inputPrefixIcon} />
                     <TextInput
                       style={[styles.formInput, { color: themeColors.text }]}
-                      placeholder="e.g. +91 98765 43210"
+                      placeholder="Enter 10-digit mobile number"
                       placeholderTextColor={themeColors.textMuted}
                       value={editPhone}
-                      onChangeText={setEditPhone}
-                      keyboardType="phone-pad"
+                      onChangeText={(text) => {
+                        const digitsOnly = text.replace(/[^0-9]/g, '').slice(0, 10);
+                        setEditPhone(digitsOnly);
+                      }}
+                      keyboardType="numeric"
+                      maxLength={10}
                     />
                   </View>
                 </View>
@@ -1090,6 +1173,60 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     marginBottom: 14,
+  },
+  floatingPopupError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FEF2F2',
+    borderColor: '#F87171',
+    borderWidth: 1.5,
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 10,
+    elevation: 4,
+    shadowColor: '#EF4444',
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 8,
+  },
+  floatingPopupTitleError: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#991B1B',
+  },
+  floatingPopupTextError: {
+    fontSize: 12,
+    color: '#DC2626',
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  floatingPopupSuccess: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#ECFDF5',
+    borderColor: '#34D399',
+    borderWidth: 1.5,
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 10,
+    elevation: 4,
+    shadowColor: '#00C48C',
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 8,
+  },
+  floatingPopupTitleSuccess: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#065F46',
+  },
+  floatingPopupTextSuccess: {
+    fontSize: 12,
+    color: '#059669',
+    fontWeight: '600',
+    marginTop: 1,
   },
   errorAlert: {
     flexDirection: 'row',

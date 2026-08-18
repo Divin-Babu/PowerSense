@@ -36,11 +36,16 @@ export async function loginUser(email, password) {
     const cleanEmail = (email || '').toLowerCase().trim();
     if (error.name === 'AbortError' || (error.message && error.message.includes('fetch')) || error.name === 'TypeError') {
       const role = cleanEmail.includes('admin') ? 'admin' : 'user';
+      const rawUser = cleanEmail.split('@')[0];
+      const fallbackName = cleanEmail === 'divin@gmail.com' 
+        ? 'Divin Babu' 
+        : (rawUser.charAt(0).toUpperCase() + rawUser.slice(1));
       return {
         success: true,
         user: {
           email: cleanEmail,
-          name: role === 'admin' ? 'System Administrator' : 'Resident User',
+          name: role === 'admin' ? 'System Administrator' : fallbackName,
+          full_name: role === 'admin' ? 'System Administrator' : fallbackName,
           role: role,
         },
         message: 'Logged in (Local session)',
@@ -449,6 +454,20 @@ export async function updateUserProfileApi({ email, name, phone, current_passwor
     throw err;
   }
 }
+
+export async function fetchUserProfileApi(email) {
+  try {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail) return null;
+    const res = await fetch(`${API_BASE_URL}/profile?email=${encodeURIComponent(cleanEmail)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || data.message || 'Failed to fetch profile');
+    return data;
+  } catch (e) {
+    return null;
+  }
+}
+
 
 
 

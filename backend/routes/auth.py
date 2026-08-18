@@ -206,6 +206,21 @@ def update_profile(req: UserProfileUpdate, db: Session = Depends(get_db)):
         user=to_user_out(user)
     )
 
+@router.get("/profile", response_model=AuthResponse)
+def get_user_profile(email: str, db: Session = Depends(get_db)):
+    clean_email = email.strip().lower()
+    user = db.query(User).filter(User.email == clean_email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User account not found."
+        )
+    return AuthResponse(
+        success=True,
+        message="Profile fetched successfully",
+        user=to_user_out(user)
+    )
+
 @router.get("/me")
 def get_current_user_stub():
     return {"message": "PowerSense AI Authentication Service Active"}
