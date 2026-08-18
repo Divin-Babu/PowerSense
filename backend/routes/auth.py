@@ -8,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database import get_db
 from models.user import User
-from schemas.user import UserCreate, UserLogin, UserOut, AuthResponse, EmailCheckResponse, clean_and_validate_indian_phone
+from schemas.user import UserCreate, UserLogin, UserOut, AuthResponse, EmailCheckResponse, UserProfileUpdate, clean_and_validate_indian_phone
 from utils.auth import hash_password, verify_password, create_access_token
 
 router = APIRouter()
@@ -112,6 +112,80 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
         success=True,
         message="Login successful!",
         token=token,
+        user=to_user_out(user)
+    )
+
+@router.put("/profile/update", response_model=AuthResponse)
+@router.post("/profile/update", response_model=AuthResponse)
+def update_profile(req: UserProfileUpdate, db: Session = Depends(get_db)):
+    clean_email = req.email.strip().lower()
+    user = db.query(User).filter(User.email == clean_email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User account not found."
+        )
+
+    # 1. Update Name if provided
+    if req.name and req.name.strip():
+        name_clean = req.name.strip()
+        if len(name_clean) < 2:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Name must be at least 2 characters long."
+            )
+        user.name = name_clean
+
+    # 2. Update Phone if provided
+    if req.phone is not None:
+        if req.phone.strip():
+            try:
+                formatted_phone = clean_and_validate_indian_phone(req.phone)
+                user.phone = formatted_phone
+            except ValueError as ve:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=str(ve)
+                )
+        else:
+            user.phone = None
+
+    # 3. Change Password if new_password is provided
+    if req.new_password and req.new_password.strip():
+        new_pwd = req.new_password.strip()
+        if len(new_pwd) < 6:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="New password must be at least 6 characters long."
+            )
+        
+        if not req.current_password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Current password is required to set a new password."
+            )
+
+        if not verify_password(req.current_password, str(getattr(user, "password"))):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Current password entered is incorrect."
+            )
+
+        user.password = hash_password(new_pwd)
+
+    try:
+        db.commit()
+        db.refresh(user)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error while updating profile: {str(e)}"
+        )
+
+    return AuthResponse(
+        success=True,
+        message="Profile updated successfully!",
         user=to_user_out(user)
     )
 

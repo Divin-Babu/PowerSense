@@ -108,6 +108,7 @@ interface StoreContextType {
   dismissAlert: (id: string) => void;
   login: (email: string, name?: string, role?: string, phone?: string) => void;
   registerUser: (name: string, email: string, phone?: string) => void;
+  updateUserProfile: (updatedData: { name?: string; phone?: string }) => void;
   logout: () => void;
 }
 
@@ -425,6 +426,32 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
+  const updateUserProfile = (updatedData: { name?: string; phone?: string }) => {
+    setState((prev) => {
+      const nextUser = {
+        ...prev.user,
+        ...(updatedData.name ? { name: updatedData.name } : {}),
+        ...(updatedData.phone ? { phone: updatedData.phone } : {}),
+      };
+
+      try {
+        const g = globalThis as any;
+        if (typeof g !== 'undefined' && g.localStorage) {
+          g.localStorage.setItem('powersense_session', JSON.stringify({
+            isLoggedIn: true,
+            user: nextUser,
+            savedAt: new Date().toISOString(),
+          }));
+        }
+      } catch (e) {}
+
+      return {
+        ...prev,
+        user: nextUser,
+      };
+    });
+  };
+
   const isDark = state.theme === 'dark';
   const themeColors = getThemeColors(state.theme);
 
@@ -443,6 +470,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         dismissAlert,
         login,
         registerUser,
+        updateUserProfile,
         logout,
       }}
     >

@@ -78,3 +78,11 @@ class AuthResponse(BaseModel):
     message: str
     token: Optional[str] = None
     user: Optional[UserOut] = None
+
+class UserProfileUpdate(BaseModel):
+    email: EmailStr
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    current_password: Optional[str] = None
+    new_password: Optional[str] = None
+

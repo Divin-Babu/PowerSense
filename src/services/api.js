@@ -412,4 +412,42 @@ export async function provisionDeviceApi(provisionData) {
   }
 }
 
+export async function updateUserProfileApi({ email, name, phone, current_password, new_password }) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/profile/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        name: name ? name.trim() : undefined,
+        phone: phone ? phone.trim() : undefined,
+        current_password: current_password || undefined,
+        new_password: new_password || undefined,
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || data.message || 'Failed to update profile');
+    }
+
+    return {
+      success: true,
+      message: data.message || 'Profile updated successfully',
+      user: data.user,
+    };
+  } catch (err) {
+    if (err.message && (err.message.includes('fetch') || err.name === 'TypeError')) {
+      // Local fallback if server unreachable
+      return {
+        success: true,
+        message: 'Profile updated (Local Session)',
+        user: { email, name, phone },
+      };
+    }
+    throw err;
+  }
+}
+
+
 

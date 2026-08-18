@@ -10,13 +10,15 @@ import {
   Modal,
   Alert,
   Platform,
+  ActivityIndicator,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter, Redirect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useStore } from '../../src/store/StoreContext';
-import { fetchDevicesData } from '../../src/services/api';
+import { fetchDevicesData, updateUserProfileApi } from '../../src/services/api';
 
 const DEFAULT_DEVICES = [
   {
@@ -34,11 +36,25 @@ const DEFAULT_DEVICES = [
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { state, togglePlugRelay, logout, isDark, themeColors, toggleTheme, setTheme } = useStore();
+  const { state, togglePlugRelay, logout, isDark, themeColors, toggleTheme, updateUserProfile } = useStore();
 
   const [deviceList, setDeviceList] = useState(DEFAULT_DEVICES);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [newDeviceName, setNewDeviceName] = useState('');
+
+  // Edit Profile & Password Modal State
+  const [editProfileModalVisible, setEditProfileModalVisible] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  const [profileSuccess, setProfileSuccess] = useState('');
 
   const loadDevices = async () => {
     try {
@@ -78,13 +94,77 @@ export default function SettingsScreen() {
       watts: 0,
       relay_state: 'OFF',
       connected_appliance: 'Smart Appliance',
-      rated_power: 1200.0,
+      rated_power: 1500.0,
       last_seen: 'Just now'
     };
     setDeviceList([newDev, ...deviceList]);
     setNewDeviceName('');
     setAddModalVisible(false);
-    Alert.alert('Device Added', `${newDev.name} has been added and paired with PZEM telemetry.`);
+  };
+
+  const openEditProfileModal = () => {
+    setEditName(state.user?.name || '');
+    setEditPhone(state.user?.phone || '');
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmNewPassword('');
+    setShowCurrentPass(false);
+    setShowNewPass(false);
+    setShowConfirmPass(false);
+    setProfileError('');
+    setProfileSuccess('');
+    setEditProfileModalVisible(true);
+  };
+
+  const handleSaveProfile = async () => {
+    setProfileError('');
+    setProfileSuccess('');
+
+    if (!editName.trim()) {
+      setProfileError('Name cannot be empty.');
+      return;
+    }
+
+    if (newPassword) {
+      if (newPassword.length < 6) {
+        setProfileError('New password must be at least 6 characters long.');
+        return;
+      }
+      if (newPassword !== confirmNewPassword) {
+        setProfileError('New passwords do not match.');
+        return;
+      }
+      if (!currentPassword) {
+        setProfileError('Please enter your current password to set a new password.');
+        return;
+      }
+    }
+
+    setIsSavingProfile(true);
+
+    try {
+      const res = await updateUserProfileApi({
+        email: state.user?.email || '',
+        name: editName.trim(),
+        phone: editPhone.trim(),
+        current_password: currentPassword || undefined,
+        new_password: newPassword || undefined,
+      });
+
+      setIsSavingProfile(false);
+      updateUserProfile({
+        name: editName.trim(),
+        phone: editPhone.trim() || undefined,
+      });
+
+      setProfileSuccess(res.message || 'Profile updated successfully!');
+      setTimeout(() => {
+        setEditProfileModalVisible(false);
+      }, 1200);
+    } catch (err: any) {
+      setIsSavingProfile(false);
+      setProfileError(err.message || 'Failed to update profile. Please check your current password.');
+    }
   };
 
   return (
@@ -134,36 +214,51 @@ export default function SettingsScreen() {
         >
           <View style={styles.featuredTop}>
             <View>
-              <Text style={styles.featuredTitle}>{singlePlug.name || 'Living Room Plug'}</Text>
+              <Text style={styles.featuredTitle}>{singlePlug.name || 'PowerSense Smart Plug'}</Text>
               <View style={styles.onlineRow}>
                 <View style={styles.greenDot} />
-                <Text style={styles.onlineText}>Online • {singlePlug.nodeId || 'ESP32-PZEM-PLUG-10A'}</Text>
+                <Text style={styles.onlineText}>Connected Load • {singlePlug.relayState === 'ON' ? 'Active Relaying' : 'Relay Disconnected'}</Text>
               </View>
             </View>
-
-            {/* Toggle Switch */}
             <Switch
               value={isFeaturedRelayOn}
               onValueChange={togglePlugRelay}
               trackColor={{ false: 'rgba(255,255,255,0.3)', true: '#FFFFFF' }}
-              thumbColor={isFeaturedRelayOn ? '#00C48C' : '#F4F3F4'}
+              thumbColor={isFeaturedRelayOn ? '#00C48C' : '#F1F5F9'}
             />
           </View>
 
-          {/* 3D Smart Plug Illustration Container */}
           <View style={styles.plugGraphicContainer}>
-            <View style={styles.plugCircleGlow}>
-              <Ionicons name="hardware-chip" size={44} color="#FFFFFF" />
+            <View style={styles.plugCircleOuter}>
+              <View style={styles.plugCircleInner}>
+                <Ionicons
+                  name={isFeaturedRelayOn ? 'flash' : 'power'}
+                  size={42}
+                  color={isFeaturedRelayOn ? '#00C48C' : '#94A3B8'}
+                />
+              </View>
             </View>
           </View>
 
-          <View style={styles.featuredBottom}>
-            <Text style={styles.featuredPowerLabel}>CURRENT LOAD</Text>
-            <Text style={styles.featuredPowerVal}>{featuredWatts} W</Text>
+          <View style={styles.featuredMetricsRow}>
+            <View style={styles.featuredMetric}>
+              <Text style={styles.featuredMetricLabel}>RELAY STATE</Text>
+              <Text style={styles.featuredMetricVal}>{singlePlug.relayState}</Text>
+            </View>
+            <View style={styles.featuredMetricDivider} />
+            <View style={styles.featuredMetric}>
+              <Text style={styles.featuredMetricLabel}>LIVE POWER</Text>
+              <Text style={styles.featuredMetricVal}>{featuredWatts} W</Text>
+            </View>
+            <View style={styles.featuredMetricDivider} />
+            <View style={styles.featuredMetric}>
+              <Text style={styles.featuredMetricLabel}>VOLTAGE</Text>
+              <Text style={styles.featuredMetricVal}>{state.telemetry.voltage || 230.8} V</Text>
+            </View>
           </View>
         </LinearGradient>
 
-        {/* BLE Provisioning Action Card */}
+        {/* BLE Auto-Provisioning Action Card */}
         <TouchableOpacity
           style={[styles.bleSetupCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}
           onPress={() => router.push('/provision')}
@@ -174,28 +269,45 @@ export default function SettingsScreen() {
               <Ionicons name="bluetooth" size={24} color="#00C48C" />
             </View>
             <View style={styles.bleSetupTextCol}>
-              <Text style={[styles.bleSetupTitle, { color: themeColors.text }]}>Add ESP32 Smart Plug</Text>
-              <Text style={[styles.bleSetupSub, { color: themeColors.textSecondary }]}>Provision via Bluetooth Low Energy (BLE)</Text>
+              <Text style={[styles.bleSetupTitle, { color: themeColors.text }]}>Add New Device via BLE</Text>
+              <Text style={[styles.bleSetupSub, { color: themeColors.textSecondary }]}>Scan & connect ESP32 hardware via Bluetooth</Text>
             </View>
           </View>
           <View style={styles.bleSetupBtn}>
-            <Text style={styles.bleSetupBtnText}>Pair</Text>
-            <Ionicons name="chevron-forward" size={14} color="#FFFFFF" />
+            <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
           </View>
         </TouchableOpacity>
 
-        {/* Other Devices Section Header */}
-        <Text style={[styles.sectionHeader, { color: themeColors.textSecondary }]}>CONNECTED SMART PLUGS ({deviceList.length})</Text>
+        {/* Connected Hardware Device Nodes List */}
+        <View style={styles.devicesHeaderRow}>
+          <Text style={[styles.sectionHeader, { color: themeColors.textSecondary, marginBottom: 0 }]}>REGISTERED HARDWARE NODES</Text>
+          <TouchableOpacity
+            style={styles.addDeviceSmallBtn}
+            onPress={() => setAddModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="add" size={14} color="#00C48C" />
+            <Text style={styles.addDeviceSmallText}>Add Plug</Text>
+          </TouchableOpacity>
+        </View>
 
-        {/* Devices List */}
-        <View style={styles.deviceList}>
+        <View style={styles.devicesList}>
           {deviceList.map((dev) => (
-            <View key={dev.id} style={[styles.deviceCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
-              <View style={[styles.deviceIconBadge, { backgroundColor: isDark ? 'rgba(0, 196, 140, 0.15)' : '#E8FBF4' }]}>
-                <Ionicons name="power" size={22} color="#00C48C" />
+            <View
+              key={dev.id}
+              style={[
+                styles.deviceCard,
+                {
+                  backgroundColor: themeColors.card,
+                  borderColor: themeColors.cardBorder,
+                },
+              ]}
+            >
+              <View style={[styles.deviceIconBox, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder }]}>
+                <Ionicons name="hardware-chip-outline" size={22} color="#00C48C" />
               </View>
 
-              <View style={styles.deviceDetails}>
+              <View style={styles.deviceInfo}>
                 <Text style={[styles.deviceName, { color: themeColors.text }]}>{dev.name}</Text>
                 <Text style={[styles.deviceAppliance, { color: themeColors.textSecondary }]}>{dev.connected_appliance || 'Smart Load'}</Text>
                 <Text style={[styles.deviceUid, { color: themeColors.textMuted }]}>{dev.uid} • {dev.status}</Text>
@@ -218,7 +330,7 @@ export default function SettingsScreen() {
         </View>
 
         {/* Account Profile & Sign Out Section */}
-        <Text style={[styles.sectionHeader, { marginTop: 24, color: themeColors.textSecondary }]}>ACCOUNT & SESSION</Text>
+        <Text style={[styles.sectionHeader, { marginTop: 24, color: themeColors.textSecondary }]}>ACCOUNT & PROFILE</Text>
         <View style={[styles.profileCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
           <View style={styles.profileRow}>
             <View style={[styles.avatarBadge, { backgroundColor: isDark ? 'rgba(0, 196, 140, 0.15)' : '#E8FBF4' }]}>
@@ -227,20 +339,33 @@ export default function SettingsScreen() {
             <View style={styles.profileDetails}>
               <Text style={[styles.profileName, { color: themeColors.text }]}>{state.user?.name || 'Resident User'}</Text>
               <Text style={[styles.profileEmail, { color: themeColors.textSecondary }]}>{state.user?.email || 'user@powersense.ai'}</Text>
+              {state.user?.phone ? (
+                <Text style={[styles.profilePhone, { color: themeColors.textMuted }]}>{state.user.phone}</Text>
+              ) : null}
             </View>
+            <TouchableOpacity
+              style={[styles.editProfileBtn, { backgroundColor: isDark ? 'rgba(0, 196, 140, 0.15)' : '#E8FBF4', borderColor: isDark ? '#00C48C40' : '#C5F0E1' }]}
+              onPress={openEditProfileModal}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="pencil" size={14} color="#00C48C" />
+              <Text style={styles.editProfileBtnText}>Edit Profile</Text>
+            </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            style={styles.signOutBtn}
-            onPress={() => {
-              logout();
-              router.replace('/login');
-            }}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="log-out-outline" size={18} color="#EF4444" />
-            <Text style={styles.signOutBtnText}>Sign Out of Account</Text>
-          </TouchableOpacity>
+          <View style={styles.profileActionsRow}>
+            <TouchableOpacity
+              style={styles.signOutBtn}
+              onPress={() => {
+                logout();
+                router.replace('/login');
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="log-out-outline" size={18} color="#EF4444" />
+              <Text style={styles.signOutBtnText}>Sign Out</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Add Device Modal */}
@@ -287,6 +412,192 @@ export default function SettingsScreen() {
               </View>
             </View>
           </View>
+        </Modal>
+
+        {/* Edit Profile & Change Password Modal */}
+        <Modal
+          visible={editProfileModalVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setEditProfileModalVisible(false)}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalOverlay}
+          >
+            <View style={[styles.editProfileModalCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
+              {/* Modal Header */}
+              <View style={styles.editModalHeader}>
+                <View style={styles.editModalHeaderLeft}>
+                  <View style={[styles.editIconBadge, { backgroundColor: isDark ? 'rgba(0, 196, 140, 0.15)' : '#E8FBF4' }]}>
+                    <Ionicons name="person" size={20} color="#00C48C" />
+                  </View>
+                  <Text style={[styles.editModalTitle, { color: themeColors.text }]}>Edit Profile</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setEditProfileModalVisible(false)}
+                  style={styles.modalCloseBtn}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="close" size={22} color={themeColors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false} style={styles.editModalScroll}>
+                {/* Feedback Alerts */}
+                {profileError ? (
+                  <View style={styles.errorAlert}>
+                    <Ionicons name="alert-circle" size={18} color="#EF4444" />
+                    <Text style={styles.errorAlertText}>{profileError}</Text>
+                  </View>
+                ) : null}
+
+                {profileSuccess ? (
+                  <View style={styles.successAlert}>
+                    <Ionicons name="checkmark-circle" size={18} color="#00C48C" />
+                    <Text style={styles.successAlertText}>{profileSuccess}</Text>
+                  </View>
+                ) : null}
+
+                {/* Section 1: User Info */}
+                <Text style={[styles.formSectionLabel, { color: themeColors.textSecondary }]}>PROFILE INFORMATION</Text>
+
+                <View style={styles.formGroup}>
+                  <Text style={[styles.formLabel, { color: themeColors.textSecondary }]}>FULL NAME</Text>
+                  <View style={[styles.formInputWrapper, { backgroundColor: themeColors.inputBg, borderColor: themeColors.inputBorder }]}>
+                    <Ionicons name="person-outline" size={18} color={themeColors.textSecondary} style={styles.inputPrefixIcon} />
+                    <TextInput
+                      style={[styles.formInput, { color: themeColors.text }]}
+                      placeholder="Your full name"
+                      placeholderTextColor={themeColors.textMuted}
+                      value={editName}
+                      onChangeText={setEditName}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={[styles.formLabel, { color: themeColors.textSecondary }]}>EMAIL (READ-ONLY)</Text>
+                  <View style={[styles.formInputWrapper, { backgroundColor: isDark ? '#1F2937' : '#F1F5F9', borderColor: themeColors.inputBorder, opacity: 0.8 }]}>
+                    <Ionicons name="mail-outline" size={18} color={themeColors.textMuted} style={styles.inputPrefixIcon} />
+                    <TextInput
+                      style={[styles.formInput, { color: themeColors.textMuted }]}
+                      value={state.user?.email || ''}
+                      editable={false}
+                    />
+                    <Ionicons name="lock-closed" size={16} color={themeColors.textMuted} />
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={[styles.formLabel, { color: themeColors.textSecondary }]}>PHONE NUMBER</Text>
+                  <View style={[styles.formInputWrapper, { backgroundColor: themeColors.inputBg, borderColor: themeColors.inputBorder }]}>
+                    <Ionicons name="call-outline" size={18} color={themeColors.textSecondary} style={styles.inputPrefixIcon} />
+                    <TextInput
+                      style={[styles.formInput, { color: themeColors.text }]}
+                      placeholder="e.g. +91 98765 43210"
+                      placeholderTextColor={themeColors.textMuted}
+                      value={editPhone}
+                      onChangeText={setEditPhone}
+                      keyboardType="phone-pad"
+                    />
+                  </View>
+                </View>
+
+                {/* Section 2: Change Password */}
+                <View style={[styles.passwordSectionBox, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder }]}>
+                  <View style={styles.passwordSectionHeader}>
+                    <Ionicons name="key-outline" size={18} color="#00C48C" />
+                    <Text style={[styles.passwordSectionTitle, { color: themeColors.text }]}>Change Password</Text>
+                  </View>
+                  <Text style={[styles.passwordSectionSubtitle, { color: themeColors.textMuted }]}>
+                    Leave password fields blank if you do not want to change your password.
+                  </Text>
+
+                  <View style={styles.formGroup}>
+                    <Text style={[styles.formLabel, { color: themeColors.textSecondary }]}>CURRENT PASSWORD</Text>
+                    <View style={[styles.formInputWrapper, { backgroundColor: themeColors.inputBg, borderColor: themeColors.inputBorder }]}>
+                      <Ionicons name="lock-closed-outline" size={18} color={themeColors.textSecondary} style={styles.inputPrefixIcon} />
+                      <TextInput
+                        style={[styles.formInput, { color: themeColors.text }]}
+                        placeholder="Enter current password"
+                        placeholderTextColor={themeColors.textMuted}
+                        secureTextEntry={!showCurrentPass}
+                        value={currentPassword}
+                        onChangeText={setCurrentPassword}
+                      />
+                      <TouchableOpacity onPress={() => setShowCurrentPass(!showCurrentPass)}>
+                        <Ionicons name={showCurrentPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={themeColors.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={[styles.formLabel, { color: themeColors.textSecondary }]}>NEW PASSWORD</Text>
+                    <View style={[styles.formInputWrapper, { backgroundColor: themeColors.inputBg, borderColor: themeColors.inputBorder }]}>
+                      <Ionicons name="shield-outline" size={18} color={themeColors.textSecondary} style={styles.inputPrefixIcon} />
+                      <TextInput
+                        style={[styles.formInput, { color: themeColors.text }]}
+                        placeholder="Min. 6 characters"
+                        placeholderTextColor={themeColors.textMuted}
+                        secureTextEntry={!showNewPass}
+                        value={newPassword}
+                        onChangeText={setNewPassword}
+                      />
+                      <TouchableOpacity onPress={() => setShowNewPass(!showNewPass)}>
+                        <Ionicons name={showNewPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={themeColors.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <View style={[styles.formGroup, { marginBottom: 0 }]}>
+                    <Text style={[styles.formLabel, { color: themeColors.textSecondary }]}>CONFIRM NEW PASSWORD</Text>
+                    <View style={[styles.formInputWrapper, { backgroundColor: themeColors.inputBg, borderColor: themeColors.inputBorder }]}>
+                      <Ionicons name="checkmark-done-outline" size={18} color={themeColors.textSecondary} style={styles.inputPrefixIcon} />
+                      <TextInput
+                        style={[styles.formInput, { color: themeColors.text }]}
+                        placeholder="Repeat new password"
+                        placeholderTextColor={themeColors.textMuted}
+                        secureTextEntry={!showConfirmPass}
+                        value={confirmNewPassword}
+                        onChangeText={setConfirmNewPassword}
+                      />
+                      <TouchableOpacity onPress={() => setShowConfirmPass(!showConfirmPass)}>
+                        <Ionicons name={showConfirmPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={themeColors.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Modal Buttons */}
+                <View style={styles.editModalButtonsRow}>
+                  <TouchableOpacity
+                    style={[styles.editCancelBtn, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder }]}
+                    onPress={() => setEditProfileModalVisible(false)}
+                    disabled={isSavingProfile}
+                  >
+                    <Text style={[styles.editCancelText, { color: themeColors.textSecondary }]}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.editSaveBtn}
+                    onPress={handleSaveProfile}
+                    disabled={isSavingProfile}
+                    activeOpacity={0.85}
+                  >
+                    {isSavingProfile ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <>
+                        <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+                        <Text style={styles.editSaveText}>Save Changes</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
         </Modal>
       </ScrollView>
     </SafeAreaView>
@@ -335,7 +646,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
 
-  // Appearance & Theme Card
+  // Theme Card
   themeCard: {
     borderRadius: 18,
     paddingHorizontal: 18,
@@ -394,37 +705,53 @@ const styles = StyleSheet.create({
   },
   plugGraphicContainer: {
     alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 14,
+    marginVertical: 18,
   },
-  plugCircleGlow: {
+  plugCircleOuter: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  plugCircleInner: {
     width: 76,
     height: 76,
     borderRadius: 38,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.4)',
+    elevation: 4,
   },
-  featuredBottom: {
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.25)',
-    paddingTop: 12,
+  featuredMetricsRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  featuredMetric: {
     alignItems: 'center',
   },
-  featuredPowerLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.8)',
-    letterSpacing: 0.6,
+  featuredMetricDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
-  featuredPowerVal: {
-    fontSize: 18,
+  featuredMetricLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.75)',
+    letterSpacing: 0.5,
+  },
+  featuredMetricVal: {
+    fontSize: 14,
     fontWeight: '800',
     color: '#FFFFFF',
+    marginTop: 2,
   },
 
   // BLE Setup Card
@@ -436,6 +763,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     borderWidth: 1,
     marginBottom: 18,
+    elevation: 2,
   },
   bleSetupLeft: {
     flexDirection: 'row',
@@ -462,22 +790,32 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   bleSetupBtn: {
+    backgroundColor: '#00C48C',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Devices List
+  devicesHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  addDeviceSmallBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#00C48C',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
   },
-  bleSetupBtnText: {
-    color: '#FFFFFF',
+  addDeviceSmallText: {
     fontSize: 12,
     fontWeight: '700',
+    color: '#00C48C',
   },
-
-  // Device list
-  deviceList: {
+  devicesList: {
     gap: 10,
     marginBottom: 16,
   },
@@ -488,15 +826,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     borderWidth: 1,
+    elevation: 1,
   },
-  deviceIconBadge: {
+  deviceIconBox: {
     width: 42,
     height: 42,
     borderRadius: 12,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  deviceDetails: {
+  deviceInfo: {
     flex: 1,
   },
   deviceName: {
@@ -509,56 +849,126 @@ const styles = StyleSheet.create({
   },
   deviceUid: {
     fontSize: 10,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     marginTop: 2,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   deviceRight: {
     alignItems: 'flex-end',
-    gap: 6,
+    gap: 4,
   },
   deviceWatts: {
-    fontSize: 13,
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#00C48C',
+  },
+
+  // Profile Card
+  profileCard: {
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    marginBottom: 16,
+    elevation: 2,
+  },
+  profileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 14,
+  },
+  avatarBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileDetails: {
+    flex: 1,
+  },
+  profileName: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  profileEmail: {
+    fontSize: 12,
+    marginTop: 1,
+  },
+  profilePhone: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  editProfileBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  editProfileBtnText: {
+    fontSize: 12,
     fontWeight: '700',
     color: '#00C48C',
+  },
+  profileActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  signOutBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+  },
+  signOutBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#EF4444',
   },
 
   // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
     justifyContent: 'center',
-    padding: 24,
+    alignItems: 'center',
+    padding: 20,
   },
   modalCard: {
     width: '100%',
+    maxWidth: 380,
     borderRadius: 24,
     padding: 24,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 20,
-    elevation: 10,
+    elevation: 8,
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
+    marginBottom: 4,
   },
   modalSub: {
-    fontSize: 13,
-    marginTop: 4,
+    fontSize: 12,
     marginBottom: 16,
   },
   modalInput: {
-    borderRadius: 14,
-    padding: 14,
-    fontSize: 14,
     borderWidth: 1,
-    marginBottom: 20,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 14,
+    marginBottom: 18,
   },
   modalButtonsRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
   modalCancelBtn: {
     flex: 1,
@@ -585,51 +995,166 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 
-  // Profile & Sign Out
-  profileCard: {
-    borderRadius: 20,
-    padding: 18,
+  // Edit Profile Modal
+  editProfileModalCard: {
+    width: '100%',
+    maxWidth: 440,
+    maxHeight: '90%',
+    borderRadius: 24,
+    padding: 20,
     borderWidth: 1,
-    marginBottom: 16,
+    elevation: 10,
   },
-  profileRow: {
+  editModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(150, 150, 150, 0.12)',
+    marginBottom: 12,
+  },
+  editModalHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    marginBottom: 16,
+    gap: 10,
   },
-  avatarBadge: {
-    width: 46,
-    height: 46,
-    borderRadius: 16,
+  editIconBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  profileDetails: {
-    flex: 1,
+  editModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
   },
-  profileName: {
-    fontSize: 15,
+  modalCloseBtn: {
+    padding: 4,
+  },
+  editModalScroll: {
+    paddingTop: 4,
+  },
+  formSectionLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    marginTop: 6,
+    marginBottom: 10,
+  },
+  formGroup: {
+    marginBottom: 14,
+  },
+  formLabel: {
+    fontSize: 10,
     fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 6,
   },
-  profileEmail: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  signOutBtn: {
+  formInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
-    paddingVertical: 12,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
+    paddingHorizontal: 14,
+    height: 48,
   },
-  signOutBtnText: {
+  inputPrefixIcon: {
+    marginRight: 10,
+  },
+  formInput: {
+    flex: 1,
+    fontSize: 14,
+  },
+  passwordSectionBox: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  passwordSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  passwordSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  passwordSectionSubtitle: {
+    fontSize: 11,
+    lineHeight: 16,
+    marginBottom: 14,
+  },
+  errorAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 12,
+  },
+  errorAlertText: {
+    fontSize: 12,
+    color: '#EF4444',
+    fontWeight: '600',
+    flex: 1,
+  },
+  successAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(0, 196, 140, 0.15)',
+    borderColor: 'rgba(0, 196, 140, 0.35)',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 12,
+  },
+  successAlertText: {
+    fontSize: 12,
+    color: '#00C48C',
+    fontWeight: '700',
+    flex: 1,
+  },
+  editModalButtonsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  editCancelBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editCancelText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  editSaveBtn: {
+    flex: 2,
+    flexDirection: 'row',
+    gap: 6,
+    paddingVertical: 13,
+    borderRadius: 14,
+    backgroundColor: '#00C48C',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 3,
+  },
+  editSaveText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#EF4444',
+    color: '#FFFFFF',
   },
 });

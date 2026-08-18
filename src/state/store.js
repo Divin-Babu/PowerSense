@@ -253,6 +253,26 @@ class Store {
     });
   }
 
+  updateUserProfile(data) {
+    const updatedUser = {
+      ...this.state.user,
+      ...(data.name ? { name: data.name } : {}),
+      ...(data.phone !== undefined ? { phone: data.phone } : {}),
+    };
+
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('powersense_session', JSON.stringify({
+          isLoggedIn: true,
+          user: updatedUser,
+          savedAt: new Date().toISOString()
+        }));
+      }
+    } catch (e) {}
+
+    this.setState({ user: updatedUser });
+  }
+
   logoutSession() {
     try {
       if (typeof window !== 'undefined') {
