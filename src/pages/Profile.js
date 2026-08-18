@@ -6,14 +6,8 @@ import { updateUserProfileApi } from '../services/api.js';
 export function Profile() {
   const state = store.getState();
   const isDark = state.theme === 'dark';
-  const user = state.user || {
-    name: 'Smart Plug Operator',
-    email: 'user@powersense.ai',
-    phone: '',
-    role: 'user',
-    nodeId: 'ESP32-PZEM-PLUG-10A',
-    firmware: 'v3.2.0-10A-protection'
-  };
+  const user = state.user || {};
+  const displayName = user.full_name || user.name || 'User';
 
   return `
     <main class="max-w-7xl mx-auto px-grid-margin mt-lg space-y-xl pb-32">
@@ -21,11 +15,11 @@ export function Profile() {
       <section class="glass-card rounded-xl p-xl border border-outline-variant flex flex-col md:flex-row justify-between items-start md:items-center gap-lg">
         <div class="flex items-center gap-md">
           <div class="w-16 h-16 rounded-full bg-primary/20 border border-primary flex items-center justify-center text-primary text-[32px] font-bold">
-            ${(user.name || 'U').charAt(0)}
+            ${(displayName || 'U').charAt(0)}
           </div>
           <div>
             <div class="flex items-center gap-3">
-              <h2 class="font-headline-lg text-headline-lg text-on-surface" id="profile-display-name">${user.name || 'Smart Plug User'}</h2>
+              <h2 class="font-headline-lg text-headline-lg text-on-surface" id="profile-display-name">${displayName}</h2>
               <button id="btn-open-edit-profile" class="px-2.5 py-1 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 rounded-lg text-xs font-bold transition-all flex items-center gap-1">
                 <span class="material-symbols-outlined text-[15px]">edit</span>
                 <span>Edit</span>
@@ -135,7 +129,7 @@ export function Profile() {
           <!-- Full Name -->
           <div class="space-y-1">
             <label class="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">FULL NAME</label>
-            <input id="edit-input-name" class="w-full bg-[#F8FAF9] dark:bg-[#0F1620] border border-[#E5E9E7] dark:border-[#243040] text-[#111827] dark:text-slate-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#00C48C]/20 focus:border-[#00C48C] transition-all" value="${user.name || ''}" placeholder="Your Full Name" required />
+            <input id="edit-input-name" class="w-full bg-[#F8FAF9] dark:bg-[#0F1620] border border-[#E5E9E7] dark:border-[#243040] text-[#111827] dark:text-slate-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#00C48C]/20 focus:border-[#00C48C] transition-all" value="${displayName}" placeholder="Your Full Name" required />
           </div>
 
           <!-- Email (Read Only) -->

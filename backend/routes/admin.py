@@ -74,7 +74,7 @@ def get_admin_overview(db: Session = Depends(get_db)):
 def get_all_users(db: Session = Depends(get_db)):
     """Fetch all users from tbl_user in PostgreSQL."""
     try:
-        users = db.query(User).order_by(User.id.asc()).all()
+        users = db.query(User).order_by(User.user_id.asc()).all()
         return {
             "success": True,
             "count": len(users),
@@ -96,7 +96,7 @@ def update_user_role(user_id: int, req: RoleUpdateRequest, db: Session = Depends
             detail="Role must be either 'admin' or 'user'."
         )
 
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -123,7 +123,7 @@ def update_user_role(user_id: int, req: RoleUpdateRequest, db: Session = Depends
 @router.delete("/users/{user_id}")
 def delete_user(user_id: int, db: Session = Depends(get_db)):
     """Delete a user account from tbl_user."""
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

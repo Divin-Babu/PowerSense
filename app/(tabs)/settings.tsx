@@ -103,7 +103,7 @@ export default function SettingsScreen() {
   };
 
   const openEditProfileModal = () => {
-    setEditName(state.user?.name || '');
+    setEditName(state.user?.full_name || state.user?.name || '');
     setEditPhone(state.user?.phone || '');
     setCurrentPassword('');
     setNewPassword('');
@@ -337,7 +337,9 @@ export default function SettingsScreen() {
               <Ionicons name="person" size={22} color="#00C48C" />
             </View>
             <View style={styles.profileDetails}>
-              <Text style={[styles.profileName, { color: themeColors.text }]}>{state.user?.name || 'Resident User'}</Text>
+              <Text style={[styles.profileName, { color: themeColors.text }]}>
+                {state.user?.full_name || state.user?.name || 'User'}
+              </Text>
               <Text style={[styles.profileEmail, { color: themeColors.textSecondary }]}>{state.user?.email || 'user@powersense.ai'}</Text>
               {state.user?.phone ? (
                 <Text style={[styles.profilePhone, { color: themeColors.textMuted }]}>{state.user.phone}</Text>

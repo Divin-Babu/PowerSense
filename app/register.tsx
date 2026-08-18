@@ -134,7 +134,7 @@ export default function RegisterScreen() {
     try {
       const res = await registerApi(trimmedName, trimmedEmail, password, phoneRes.formatted);
       setIsLoading(false);
-      registerUser(res.user?.name || trimmedName, res.user?.email || trimmedEmail, res.user?.phone || phoneRes.formatted);
+      registerUser(res.user?.full_name || res.user?.name || trimmedName, res.user?.email || trimmedEmail, res.user?.phone || phoneRes.formatted);
       router.replace('/(tabs)/dashboard');
     } catch (err: any) {
       setIsLoading(false);

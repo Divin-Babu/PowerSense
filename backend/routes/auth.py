@@ -8,15 +8,31 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database import get_db
 from models.user import User
-from schemas.user import UserCreate, UserLogin, UserOut, AuthResponse, EmailCheckResponse, UserProfileUpdate, clean_and_validate_indian_phone
+from schemas.user import (
+    UserCreate,
+    UserLogin,
+    UserOut,
+    AuthResponse,
+    EmailCheckResponse,
+    UserProfileUpdate,
+    clean_and_validate_indian_phone
+)
 from utils.auth import hash_password, verify_password, create_access_token
 
 router = APIRouter()
 
 def to_user_out(user: User) -> UserOut:
-    if hasattr(UserOut, "model_validate"):
-        return UserOut.model_validate(user)
-    return UserOut.from_orm(user)
+    raw_name = getattr(user, "full_name", None) or getattr(user, "name", None) or "User"
+    return UserOut(
+        id=getattr(user, "user_id", None) or getattr(user, "id", None),
+        user_id=getattr(user, "user_id", None) or getattr(user, "id", None),
+        full_name=raw_name,
+        name=raw_name,
+        email=getattr(user, "email", ""),
+        phone=getattr(user, "phone", None),
+        role=getattr(user, "role", "user") or "user",
+        created_at=getattr(user, "created_at", None)
+    )
 
 @router.get("/check-email", response_model=EmailCheckResponse)
 def check_email_availability(email: str, db: Session = Depends(get_db)):
@@ -56,15 +72,15 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
 
     # Hash password and create new user
     hashed_pwd = hash_password(user_in.password)
-    user_name = user_in.name.strip() if user_in.name else "Smart Plug User"
+    user_name = (user_in.full_name or user_in.name or "User").strip()
 
     user_phone = user_in.phone.strip() if user_in.phone else None
 
     new_user = User(
-        name=user_name,
+        full_name=user_name,
         email=clean_email,
         phone=user_phone,
-        password=hashed_pwd,
+        password_hash=hashed_pwd,
         role="user"
     )
 
@@ -79,7 +95,7 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
             detail=f"Database error during user registration: {str(e)}"
         )
 
-    token = create_access_token(data={"sub": str(getattr(new_user, "email")), "user_id": getattr(new_user, "id")})
+    token = create_access_token(data={"sub": str(getattr(new_user, "email")), "user_id": getattr(new_user, "user_id", getattr(new_user, "id", None))})
 
     return AuthResponse(
         success=True,
@@ -106,7 +122,7 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
             detail="Invalid email or password."
         )
 
-    token = create_access_token(data={"sub": str(getattr(user, "email")), "user_id": getattr(user, "id")})
+    token = create_access_token(data={"sub": str(getattr(user, "email")), "user_id": getattr(user, "user_id", getattr(user, "id", None))})
 
     return AuthResponse(
         success=True,
@@ -126,15 +142,16 @@ def update_profile(req: UserProfileUpdate, db: Session = Depends(get_db)):
             detail="User account not found."
         )
 
-    # 1. Update Name if provided
-    if req.name and req.name.strip():
-        name_clean = req.name.strip()
+    # 1. Update Full Name if provided
+    raw_name = req.full_name or req.name
+    if raw_name and raw_name.strip():
+        name_clean = raw_name.strip()
         if len(name_clean) < 2:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Name must be at least 2 characters long."
             )
-        user.name = name_clean
+        user.full_name = name_clean
 
     # 2. Update Phone if provided
     if req.phone is not None:
@@ -171,7 +188,7 @@ def update_profile(req: UserProfileUpdate, db: Session = Depends(get_db)):
                 detail="Current password entered is incorrect."
             )
 
-        user.password = hash_password(new_pwd)
+        user.password_hash = hash_password(new_pwd)
 
     try:
         db.commit()

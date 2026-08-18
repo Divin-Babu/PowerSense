@@ -349,9 +349,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const login = (email: string, name?: string, role?: string, phone?: string) => {
     const userRole = role || (email?.toLowerCase().includes('admin') ? 'admin' : 'user');
+    const dispName = name || (userRole === 'admin' ? 'System Administrator' : 'User');
     const newUser = {
       email: email || (userRole === 'admin' ? 'admin@powersense.com' : 'user@powersense.ai'),
-      name: name || (userRole === 'admin' ? 'System Administrator' : 'Smart Plug User'),
+      name: dispName,
+      full_name: dispName,
       role: userRole,
       phone: phone || '',
       nodeId: 'ESP32-PZEM-PLUG-10A',
@@ -377,8 +379,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const registerUser = (name: string, email: string, phone?: string) => {
+    const dispName = name || 'User';
     const newUser = {
-      name: name || 'Smart Plug User',
+      name: dispName,
+      full_name: dispName,
       email: email || 'user@powersense.ai',
       role: 'user',
       phone: phone || '',
@@ -418,6 +422,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       isLoggedIn: false,
       user: {
         name: '',
+        full_name: '',
         email: '',
         role: 'user',
         nodeId: 'ESP32-PZEM-PLUG-01',
@@ -426,12 +431,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
-  const updateUserProfile = (updatedData: { name?: string; phone?: string }) => {
+  const updateUserProfile = (updatedData: { name?: string; full_name?: string; phone?: string }) => {
     setState((prev) => {
+      const nextName = updatedData.full_name || updatedData.name || prev.user.name;
       const nextUser = {
         ...prev.user,
-        ...(updatedData.name ? { name: updatedData.name } : {}),
-        ...(updatedData.phone ? { phone: updatedData.phone } : {}),
+        name: nextName,
+        full_name: nextName,
+        ...(updatedData.phone !== undefined ? { phone: updatedData.phone } : {}),
       };
 
       try {

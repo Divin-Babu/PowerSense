@@ -227,8 +227,10 @@ class Store {
 
   loginSession(user) {
     const userRole = user.role || (user.email?.toLowerCase().includes('admin') ? 'admin' : 'user');
+    const dispName = user.full_name || user.name || (userRole === 'admin' ? 'System Administrator' : 'User');
     const userData = {
-      name: user.name || (userRole === 'admin' ? 'System Administrator' : 'Smart Plug User'),
+      name: dispName,
+      full_name: dispName,
       email: user.email || (userRole === 'admin' ? 'admin@powersense.com' : 'user@powersense.ai'),
       phone: user.phone || null,
       role: userRole,
@@ -254,9 +256,11 @@ class Store {
   }
 
   updateUserProfile(data) {
+    const nextName = data.full_name || data.name || this.state.user?.name;
     const updatedUser = {
       ...this.state.user,
-      ...(data.name ? { name: data.name } : {}),
+      name: nextName,
+      full_name: nextName,
       ...(data.phone !== undefined ? { phone: data.phone } : {}),
     };
 

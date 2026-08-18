@@ -27,18 +27,10 @@ def seed_database():
     from sqlalchemy import text
     with engine.connect() as conn:
         try:
-            conn.execute(text("ALTER TABLE tbl_user ADD COLUMN IF NOT EXISTS name VARCHAR(255);"))
-            try:
-                conn.execute(text("ALTER TABLE tbl_user ALTER COLUMN full_name DROP NOT NULL;"))
-            except Exception:
-                pass
-            try:
-                conn.execute(text("UPDATE tbl_user SET name = full_name WHERE name IS NULL;"))
-            except Exception:
-                pass
+            conn.execute(text("ALTER TABLE tbl_user DROP COLUMN IF EXISTS name;"))
             conn.commit()
-        except Exception as e:
-            print(f"[Migration Info] {e}")
+        except Exception:
+            pass
 
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()

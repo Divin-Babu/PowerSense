@@ -76,6 +76,7 @@ export interface KnowledgeItem {
 
 export interface UserProfile {
   name: string;
+  full_name?: string;
   email: string;
   phone?: string;
   role: string;

@@ -57,7 +57,7 @@ export async function registerUser(name, email, password, phone) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ name, email, password, phone }),
+      body: JSON.stringify({ full_name: name, name: name, email, password, phone }),
     });
 
     const data = await response.json();
@@ -419,6 +419,7 @@ export async function updateUserProfileApi({ email, name, phone, current_passwor
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email,
+        full_name: name ? name.trim() : undefined,
         name: name ? name.trim() : undefined,
         phone: phone ? phone.trim() : undefined,
         current_password: current_password || undefined,

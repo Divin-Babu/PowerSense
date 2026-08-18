@@ -24,7 +24,8 @@ def clean_and_validate_indian_phone(phone: Optional[str]) -> Optional[str]:
     return f"+91 {cleaned[:5]} {cleaned[5:]}"
 
 class UserCreate(BaseModel):
-    name: Optional[str] = "Smart Plug User"
+    full_name: Optional[str] = None
+    name: Optional[str] = None
     email: EmailStr
     phone: Optional[str] = None
     password: str
@@ -35,16 +36,6 @@ class UserCreate(BaseModel):
         if v:
             return clean_and_validate_indian_phone(v)
         return v
-
-    @field_validator("name")
-    @classmethod
-    def validate_name(cls, v: Optional[str]) -> Optional[str]:
-        if v:
-            v_stripped = v.strip()
-            if len(v_stripped) < 2:
-                raise ValueError("Name must be at least 2 characters long.")
-            return v_stripped
-        return "Smart Plug User"
 
     @field_validator("password")
     @classmethod
@@ -62,6 +53,7 @@ class UserOut(BaseModel):
 
     id: Optional[int] = None
     user_id: Optional[int] = None
+    full_name: Optional[str] = None
     name: Optional[str] = None
     email: str
     phone: Optional[str] = None
@@ -81,8 +73,8 @@ class AuthResponse(BaseModel):
 
 class UserProfileUpdate(BaseModel):
     email: EmailStr
+    full_name: Optional[str] = None
     name: Optional[str] = None
     phone: Optional[str] = None
     current_password: Optional[str] = None
     new_password: Optional[str] = None
-

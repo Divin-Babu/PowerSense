@@ -52,7 +52,8 @@ export default function LoginScreen() {
       const res = await loginUser(cleanEmail, password);
       setIsLoading(false);
       const role = res.user?.role || (cleanEmail.includes('admin') ? 'admin' : 'user');
-      login(res.user?.email || cleanEmail, res.user?.name || res.user?.full_name || 'User', role, res.user?.phone);
+      const userDisplayName = res.user?.full_name || res.user?.name || (role === 'admin' ? 'System Administrator' : 'User');
+      login(res.user?.email || cleanEmail, userDisplayName, role, res.user?.phone);
       if (role === 'admin') {
         router.replace('/(tabs)/admin');
       } else {
