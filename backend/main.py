@@ -14,6 +14,7 @@ from routes.auth import router as auth_router
 from routes.admin import router as admin_router
 from routes.telemetry import router as telemetry_router
 from routes.data import router as data_router
+from routes.reports import router as reports_router
 from seed_data import seed_database
 
 @asynccontextmanager
@@ -42,11 +43,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def clean_url_middleware(request, call_next):
+    raw_path = request.scope.get("path", "")
+    if ("}" in raw_path or "$" in raw_path or "%7D" in raw_path or "%24" in raw_path):
+        clean_path = raw_path.split("}")[0].split("$")[0].split("%7D")[0].split("%24")[0]
+        request.scope["path"] = clean_path
+    return await call_next(request)
+
 # Include Routers
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(admin_router, prefix="/api/admin", tags=["Admin"])
 app.include_router(telemetry_router, prefix="/api", tags=["ESP32 Telemetry"])
 app.include_router(data_router, prefix="/api/data", tags=["Database Data"])
+app.include_router(reports_router, prefix="/api/reports", tags=["PDF Reports"])
 
 @app.get("/")
 def read_root():
@@ -54,7 +64,34 @@ def read_root():
         "status": "online",
         "app": "PowerSense AI Smart Plug API",
         "version": "1.0.0",
-        "docs": "/docs"
+        "live_telemetry_url": "/api/telemetry/live",
+        "dashboard_data_url": "/api/data/dashboard",
+        "swagger_docs": "/docs"
+    }
+
+@app.get("/api")
+@app.get("/api/")
+def api_root():
+    return {
+        "status": "online",
+        "endpoints": [
+            "/api/telemetry/live",
+            "/api/esp32/telemetry",
+            "/api/esp32/relay",
+            "/api/data/dashboard",
+            "/api/data/devices",
+            "/api/auth/login",
+            "/docs"
+        ]
+    }
+
+@app.get("/api/telemetry")
+@app.get("/api/telemetry/")
+def telemetry_root_redirect():
+    from routes.telemetry import LATEST_TELEMETRY
+    return {
+        "success": True,
+        "telemetry": LATEST_TELEMETRY
     }
 
 @app.get("/api/health")

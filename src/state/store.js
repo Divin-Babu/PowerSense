@@ -104,7 +104,7 @@ class Store {
       window.toggleTheme = () => this.toggleTheme();
 
       // Poll live ESP32 telemetry from backend
-      setInterval(() => this.syncTelemetry(), 2500);
+      setInterval(() => this.syncTelemetry(), 500);
     }
   }
 
@@ -126,7 +126,7 @@ class Store {
       if (typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.setItem('powersense_theme', nextTheme);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     this.applyThemeToDOM(nextTheme);
     this.setState({ theme: nextTheme });
@@ -137,7 +137,7 @@ class Store {
       if (typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.setItem('powersense_theme', mode);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     this.applyThemeToDOM(mode);
     this.setState({ theme: mode });
@@ -157,20 +157,26 @@ class Store {
             powerFactor: live.power_factor || 0.0,
             frequency: live.frequency || 0.0,
             cumulativeKwh: live.energy_kwh || 0.0,
+            apparentPowerVa: live.apparent_power_va || 0.0,
+            reactivePowerVar: live.reactive_power_var || 0.0,
+            hourlyCost: live.hourly_cost || 0.0,
+            monthlyCost: live.monthly_cost || 0.0,
+            carbonKg: live.carbon_kg || 0.0,
+            loadType: live.load_type || 'Unknown',
             gridStatus: 'ONLINE (ESP32 Live Stream)',
             hardwareStatus: `ESP32 Active (${live.device_id || 'Node'})`,
             wifiRssi: live.rssi || -60
           },
           singlePlug: {
             ...this.state.singlePlug,
-            watts: live.power_watts || (live.power_kw ? live.power_kw * 1000 : 0),
+            watts: live.power_watts !== undefined ? live.power_watts : (live.power_kw ? live.power_kw * 1000 : 0),
             relayState: live.relay_state || 'OFF',
             nodeId: live.device_id || this.state.singlePlug.nodeId,
             connectedLoadName: live.device_name || 'ESP32 Live Monitored Load'
           }
         });
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   getState() {
@@ -246,7 +252,7 @@ class Store {
           savedAt: new Date().toISOString()
         }));
       }
-    } catch (e) {}
+    } catch (e) { }
 
     this.setState({
       isLoggedIn: true,
@@ -272,7 +278,7 @@ class Store {
           savedAt: new Date().toISOString()
         }));
       }
-    } catch (e) {}
+    } catch (e) { }
 
     this.setState({ user: updatedUser });
   }
@@ -283,7 +289,7 @@ class Store {
         if (window.localStorage) window.localStorage.removeItem('powersense_session');
         if (window.sessionStorage) window.sessionStorage.clear();
       }
-    } catch (e) {}
+    } catch (e) { }
 
     this.setState({
       isLoggedIn: false,

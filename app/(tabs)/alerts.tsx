@@ -64,22 +64,24 @@ const DEFAULT_ALERTS = [
 
 export default function AlertsScreen() {
   const router = useRouter();
-  const { state, isDark, themeColors } = useStore();
+  const { state, dismissAlert, isDark, themeColors } = useStore();
 
   const [activeFilter, setActiveFilter] = useState<AlertFilter>('all');
-  const [alertsList, setAlertsList] = useState(DEFAULT_ALERTS);
+  const [apiAlerts, setApiAlerts] = useState<any[]>([]);
 
   const loadAlerts = async (cat: string) => {
     try {
       const data: any = await fetchAlertsData(cat);
-      if (data?.alerts && Array.isArray(data.alerts) && data.alerts.length > 0) {
-        setAlertsList(data.alerts);
+      if (data?.alerts && Array.isArray(data.alerts)) {
+        setApiAlerts(data.alerts);
       }
     } catch (e) {}
   };
 
   useEffect(() => {
     loadAlerts(activeFilter);
+    const interval = setInterval(() => loadAlerts(activeFilter), 4000);
+    return () => clearInterval(interval);
   }, [activeFilter]);
 
   if (!state.isLoggedIn) {
@@ -90,8 +92,24 @@ export default function AlertsScreen() {
     return <Redirect href="/(tabs)/admin" />;
   }
 
-  const filteredAlerts = alertsList.filter((item) => {
+  // Combine live store alerts with backend API notifications
+  const storeAlertsMapped = (state.alerts || []).map((a) => ({
+    id: a.id,
+    title: a.title,
+    description: a.description,
+    time: a.timestamp || 'Just now',
+    category: a.type === 'error' ? 'critical' : a.type === 'warning' ? 'warning' : 'info',
+    icon: a.type === 'error' ? 'alert-circle' : a.type === 'warning' ? 'warning' : 'information-circle',
+    iconColor: a.type === 'error' ? '#EF4444' : a.type === 'warning' ? '#F59E0B' : '#00C48C',
+    badgeBg: a.type === 'error' ? '#FEE2E2' : a.type === 'warning' ? '#FEF3C7' : '#E8FBF4',
+    unread: true,
+    isStoreAlert: true,
+  }));
+
+  const allCombinedAlerts = [...storeAlertsMapped, ...apiAlerts];
+  const filteredAlerts = allCombinedAlerts.filter((item) => {
     if (activeFilter === 'all') return true;
+    if (activeFilter === 'critical') return item.category === 'critical' || item.category === 'warning';
     return item.category === activeFilter;
   });
 
@@ -110,7 +128,7 @@ export default function AlertsScreen() {
         {/* Filter Pills */}
         <View style={[styles.filtersWrapper, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
           {[
-            { key: 'all', label: 'All' },
+            { key: 'all', label: `All (${allCombinedAlerts.length})` },
             { key: 'critical', label: 'Warnings' },
             { key: 'info', label: 'Info' },
           ].map((item) => {
@@ -141,56 +159,76 @@ export default function AlertsScreen() {
 
         {/* Alerts List */}
         <View style={styles.alertsList}>
-          {filteredAlerts.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={[
-                styles.alertCard,
-                {
-                  backgroundColor: themeColors.card,
-                  borderColor: themeColors.cardBorder,
-                },
-              ]}
-              activeOpacity={0.7}
-            >
-              {/* Category Colored Icon Badge */}
-              <View
+          {filteredAlerts.length === 0 ? (
+            <View style={{ padding: 30, alignItems: 'center' }}>
+              <Ionicons name="checkmark-circle-outline" size={42} color="#00C48C" />
+              <Text style={{ marginTop: 10, color: themeColors.textSecondary, fontSize: 14 }}>
+                No active notifications
+              </Text>
+            </View>
+          ) : (
+            filteredAlerts.map((item, idx) => (
+              <TouchableOpacity
+                key={`${item.isStoreAlert ? 'store' : 'api'}-${item.id}-${idx}`}
                 style={[
-                  styles.alertIconBadge,
+                  styles.alertCard,
                   {
-                    backgroundColor: isDark
-                      ? item.category === 'critical'
-                        ? 'rgba(239, 68, 68, 0.18)'
-                        : item.category === 'warning'
-                        ? 'rgba(245, 158, 11, 0.18)'
-                        : 'rgba(56, 189, 248, 0.18)'
-                      : item.badgeBg || '#F8FAF9',
+                    backgroundColor: themeColors.card,
+                    borderColor: themeColors.cardBorder,
                   },
                 ]}
+                activeOpacity={0.7}
+                onPress={() => {
+                  if (item.isStoreAlert) {
+                    dismissAlert(item.id);
+                  }
+                }}
               >
-                <Ionicons name={item.icon as any} size={20} color={item.iconColor || '#00C48C'} />
-              </View>
-
-              <View style={styles.alertContent}>
-                <View style={styles.titleRow}>
-                  <Text
-                    style={[
-                      styles.alertTitle,
-                      { color: themeColors.text },
-                      item.category === 'critical' && { color: '#EF4444' },
-                      item.category === 'warning' && { color: '#F59E0B' },
-                    ]}
-                  >
-                    {item.title}
-                  </Text>
+                {/* Category Colored Icon Badge */}
+                <View
+                  style={[
+                    styles.alertIconBadge,
+                    {
+                      backgroundColor: isDark
+                        ? item.category === 'critical'
+                          ? 'rgba(239, 68, 68, 0.18)'
+                          : item.category === 'warning'
+                          ? 'rgba(245, 158, 11, 0.18)'
+                          : 'rgba(0, 196, 140, 0.18)'
+                        : item.badgeBg || '#F8FAF9',
+                    },
+                  ]}
+                >
+                  <Ionicons name={item.icon as any} size={20} color={item.iconColor || '#00C48C'} />
                 </View>
-                <Text style={[styles.alertTime, { color: themeColors.textMuted }]}>{item.time}</Text>
-                <Text style={[styles.alertDesc, { color: themeColors.textSecondary }]}>{item.description}</Text>
-              </View>
 
-              <Ionicons name="chevron-forward" size={18} color={themeColors.textMuted} />
-            </TouchableOpacity>
-          ))}
+                <View style={styles.alertContent}>
+                  <View style={styles.titleRow}>
+                    <Text
+                      style={[
+                        styles.alertTitle,
+                        { color: themeColors.text },
+                        item.category === 'critical' && { color: '#EF4444' },
+                        item.category === 'warning' && { color: '#F59E0B' },
+                      ]}
+                    >
+                      {item.title}
+                    </Text>
+                  </View>
+                  <Text style={[styles.alertTime, { color: themeColors.textMuted }]}>{item.time}</Text>
+                  <Text style={[styles.alertDesc, { color: themeColors.textSecondary }]}>{item.description}</Text>
+                </View>
+
+                {item.isStoreAlert ? (
+                  <TouchableOpacity onPress={() => dismissAlert(item.id)} style={{ padding: 4 }}>
+                    <Ionicons name="close-circle" size={18} color="#EF4444" />
+                  </TouchableOpacity>
+                ) : (
+                  <Ionicons name="chevron-forward" size={18} color={themeColors.textMuted} />
+                )}
+              </TouchableOpacity>
+            ))
+          )}
         </View>
 
         <View style={{ height: 24 }} />

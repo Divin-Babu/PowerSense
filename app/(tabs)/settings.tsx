@@ -26,7 +26,7 @@ const DEFAULT_DEVICES = [
     name: 'PowerSense Smart Plug',
     uid: 'ESP32-PZEM-PLUG-10A',
     status: 'ONLINE',
-    watts: 215,
+    watts: 0,
     relay_state: 'ON',
     connected_appliance: 'Connected Load (PZEM-004T)',
     rated_power: 1500.0,
@@ -234,6 +234,17 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleDeviceRelayToggle = (devId: number, devUid: string) => {
+    const isPrimary = devId === 1 || devUid === singlePlug.nodeId || devUid === 'ESP32-PZEM-PLUG-10A';
+    if (isPrimary) {
+      togglePlugRelay();
+    } else {
+      setDeviceList(prev =>
+        prev.map(d => (d.id === devId ? { ...d, relay_state: d.relay_state === 'ON' ? 'OFF' : 'ON' } : d))
+      );
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]} edges={['top']}>
       <ScrollView
@@ -274,7 +285,7 @@ export default function SettingsScreen() {
         {/* Featured Smart Plug Card */}
         <Text style={[styles.sectionHeader, { marginTop: 20, color: themeColors.textSecondary }]}>ACTIVE SMART PLUG NODE</Text>
         <LinearGradient
-          colors={['#00D589', '#009E69']}
+          colors={isFeaturedRelayOn ? ['#00D589', '#009E69'] : ['#475569', '#334155']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.featuredCard}
@@ -283,34 +294,37 @@ export default function SettingsScreen() {
             <View>
               <Text style={styles.featuredTitle}>{singlePlug.name || 'PowerSense Smart Plug'}</Text>
               <View style={styles.onlineRow}>
-                <View style={styles.greenDot} />
-                <Text style={styles.onlineText}>Connected Load • {singlePlug.relayState === 'ON' ? 'Active Relaying' : 'Relay Disconnected'}</Text>
+                <View style={[styles.greenDot, { backgroundColor: isFeaturedRelayOn ? '#FFFFFF' : '#94A3B8' }]} />
+                <Text style={styles.onlineText}>Connected Load • {isFeaturedRelayOn ? 'Active Relaying' : 'Relay Disconnected'}</Text>
               </View>
             </View>
-            <Switch
-              value={isFeaturedRelayOn}
-              onValueChange={togglePlugRelay}
-              trackColor={{ false: 'rgba(255,255,255,0.3)', true: '#FFFFFF' }}
-              thumbColor={isFeaturedRelayOn ? '#00C48C' : '#F1F5F9'}
-            />
           </View>
 
-          <View style={styles.plugGraphicContainer}>
-            <View style={styles.plugCircleOuter}>
-              <View style={styles.plugCircleInner}>
+          {/* Central Interactive Power Button */}
+          <TouchableOpacity
+            style={styles.plugGraphicContainer}
+            onPress={togglePlugRelay}
+            activeOpacity={0.85}
+            accessibilityLabel={isFeaturedRelayOn ? 'Turn Relay Off' : 'Turn Relay On'}
+          >
+            <View style={[styles.plugCircleOuter, isFeaturedRelayOn ? styles.plugCircleOuterOn : styles.plugCircleOuterOff]}>
+              <View style={[styles.plugCircleInner, isFeaturedRelayOn ? styles.plugCircleInnerOn : styles.plugCircleInnerOff]}>
                 <Ionicons
-                  name={isFeaturedRelayOn ? 'flash' : 'power'}
+                  name="power"
                   size={42}
                   color={isFeaturedRelayOn ? '#00C48C' : '#94A3B8'}
                 />
               </View>
             </View>
-          </View>
+            <Text style={styles.plugTapHint}>
+              {isFeaturedRelayOn ? '⚡ Relay Active • Tap to Disconnect' : '🔌 Relay OFF • Tap to Connect'}
+            </Text>
+          </TouchableOpacity>
 
           <View style={styles.featuredMetricsRow}>
             <View style={styles.featuredMetric}>
               <Text style={styles.featuredMetricLabel}>RELAY STATE</Text>
-              <Text style={styles.featuredMetricVal}>{singlePlug.relayState}</Text>
+              <Text style={styles.featuredMetricVal}>{isFeaturedRelayOn ? 'ON' : 'OFF'}</Text>
             </View>
             <View style={styles.featuredMetricDivider} />
             <View style={styles.featuredMetric}>
@@ -345,7 +359,7 @@ export default function SettingsScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* Connected Hardware Device Nodes List */}
+        {/* Connected Hardware Device Nodes List (Synchronized with Active Node) */}
         <View style={styles.devicesHeaderRow}>
           <Text style={[styles.sectionHeader, { color: themeColors.textSecondary, marginBottom: 0 }]}>REGISTERED HARDWARE NODES</Text>
           <TouchableOpacity
@@ -359,41 +373,44 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.devicesList}>
-          {deviceList.map((dev) => (
-            <View
-              key={dev.id}
-              style={[
-                styles.deviceCard,
-                {
-                  backgroundColor: themeColors.card,
-                  borderColor: themeColors.cardBorder,
-                },
-              ]}
-            >
-              <View style={[styles.deviceIconBox, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder }]}>
-                <Ionicons name="hardware-chip-outline" size={22} color="#00C48C" />
-              </View>
+          {deviceList.map((dev) => {
+            const isPrimary = dev.id === 1 || dev.uid === singlePlug.nodeId || dev.uid === 'ESP32-PZEM-PLUG-10A';
+            const isDevRelayOn = isPrimary ? isFeaturedRelayOn : dev.relay_state === 'ON';
+            const devWatts = isPrimary ? featuredWatts : (isDevRelayOn ? dev.watts : 0);
 
-              <View style={styles.deviceInfo}>
-                <Text style={[styles.deviceName, { color: themeColors.text }]}>{dev.name}</Text>
-                <Text style={[styles.deviceAppliance, { color: themeColors.textSecondary }]}>{dev.connected_appliance || 'Smart Load'}</Text>
-                <Text style={[styles.deviceUid, { color: themeColors.textMuted }]}>{dev.uid} • {dev.status}</Text>
-              </View>
+            return (
+              <View
+                key={dev.id}
+                style={[
+                  styles.deviceCard,
+                  {
+                    backgroundColor: themeColors.card,
+                    borderColor: themeColors.cardBorder,
+                  },
+                ]}
+              >
+                <View style={[styles.deviceIconBox, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder }]}>
+                  <Ionicons name="hardware-chip-outline" size={22} color={isDevRelayOn ? '#00C48C' : themeColors.textMuted} />
+                </View>
 
-              <View style={styles.deviceRight}>
-                <Text style={styles.deviceWatts}>{dev.watts} W</Text>
-                <Switch
-                  value={dev.relay_state === 'ON'}
-                  onValueChange={() => {
-                    const updated = deviceList.map(d => d.id === dev.id ? { ...d, relay_state: d.relay_state === 'ON' ? 'OFF' : 'ON' } : d);
-                    setDeviceList(updated);
-                  }}
-                  trackColor={{ false: isDark ? '#243040' : '#E2E8F0', true: '#A7F3D0' }}
-                  thumbColor={dev.relay_state === 'ON' ? '#00C48C' : '#94A3B8'}
-                />
+                <View style={styles.deviceInfo}>
+                  <Text style={[styles.deviceName, { color: themeColors.text }]}>{dev.name}</Text>
+                  <Text style={[styles.deviceAppliance, { color: themeColors.textSecondary }]}>{dev.connected_appliance || 'Smart Load'}</Text>
+                  <Text style={[styles.deviceUid, { color: themeColors.textMuted }]}>{dev.uid} • {dev.status}</Text>
+                </View>
+
+                <View style={styles.deviceRight}>
+                  <Text style={[styles.deviceWatts, { color: isDevRelayOn ? '#00C48C' : themeColors.textMuted }]}>{devWatts} W</Text>
+                  <Switch
+                    value={isDevRelayOn}
+                    onValueChange={() => handleDeviceRelayToggle(dev.id, dev.uid)}
+                    trackColor={{ false: isDark ? '#243040' : '#E2E8F0', true: '#A7F3D0' }}
+                    thumbColor={isDevRelayOn ? '#00C48C' : '#94A3B8'}
+                  />
+                </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
         {/* Account Profile & Sign Out Section */}
@@ -788,26 +805,60 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: 'rgba(255,255,255,0.9)',
   },
+
   plugGraphicContainer: {
     alignItems: 'center',
-    marginVertical: 18,
+    marginVertical: 14,
   },
   plugCircleOuter: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    width: 104,
+    height: 104,
+    borderRadius: 52,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  plugCircleOuterOn: {
+    backgroundColor: 'rgba(255, 255, 255, 0.24)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.45)',
+    shadowColor: '#FFFFFF',
+    shadowOpacity: 0.35,
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  plugCircleOuterOff: {
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
   plugCircleInner: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    backgroundColor: '#FFFFFF',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 4,
+    elevation: 5,
+  },
+  plugCircleInnerOn: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#00C48C',
+    shadowOpacity: 0.35,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+  },
+  plugCircleInnerOff: {
+    backgroundColor: 'rgba(255, 255, 255, 0.88)',
+  },
+  plugTapHint: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginTop: 10,
+    letterSpacing: 0.3,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   featuredMetricsRow: {
     flexDirection: 'row',

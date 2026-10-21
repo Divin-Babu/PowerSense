@@ -10,6 +10,7 @@ load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY", "powersense_super_secret_jwt_key_2026")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
+RESET_TOKEN_EXPIRE_MINUTES = int(os.getenv("RESET_TOKEN_EXPIRE_MINUTES", "30"))
 
 def hash_password(password: str) -> str:
     pwd_bytes = password.encode('utf-8')
@@ -47,3 +48,27 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+def create_password_reset_token(email: str) -> str:
+    """Create a signed JWT token specifically for password reset with 30-minute expiration."""
+    clean_email = email.strip().lower()
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES)
+    payload = {
+        "sub": clean_email,
+        "email": clean_email,
+        "type": "password_reset",
+        "exp": expire,
+        "iat": now
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+def verify_password_reset_token(token: str) -> Optional[dict]:
+    """Verify and decode a password reset token."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "password_reset":
+            return None
+        return payload
+    except Exception:
+        return None

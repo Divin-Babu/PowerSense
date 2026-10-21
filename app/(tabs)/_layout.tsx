@@ -10,14 +10,14 @@ function TabBarIcon({ name, color, size = 22 }: { name: React.ComponentProps<typ
 
 export default function TabsLayout() {
   const { state, isDark, themeColors } = useStore();
+  const insets = useSafeAreaInsets();
 
   if (!state.isLoggedIn) {
     return <Redirect href="/login" />;
   }
 
   const isAdmin = state.user?.role === 'admin';
-  const alertCount = state.alerts.length;
-  const insets = useSafeAreaInsets();
+  const alertCount = state.alerts ? state.alerts.length : 0;
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'android' ? 16 : 8);
 
   return (

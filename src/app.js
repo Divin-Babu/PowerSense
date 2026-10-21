@@ -1001,7 +1001,12 @@
 
               <!-- Password -->
               <div class="space-y-xs">
-                <label class="font-mono text-[10px] font-bold text-on-surface-variant uppercase tracking-wider" for="login-password">PASSWORD</label>
+                <div class="flex justify-between items-center">
+                  <label class="font-mono text-[10px] font-bold text-on-surface-variant uppercase tracking-wider" for="login-password">PASSWORD</label>
+                  <button type="button" id="open-forgot-pass-btn" class="font-mono text-[11px] font-bold text-cyber-cyan hover:underline focus:outline-none">
+                    Forgot Password?
+                  </button>
+                </div>
                 <div class="relative group">
                   <div class="absolute inset-y-0 left-0 pl-md flex items-center pointer-events-none text-on-surface-variant group-focus-within:text-cyber-cyan transition-colors">
                     <span class="material-symbols-outlined text-[20px]">lock</span>
@@ -1025,6 +1030,83 @@
                 Don't have an account? 
                 <button id="goto-register-btn" class="text-cyber-cyan font-bold hover:underline ml-xs">Create Account / Register</button>
               </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- FORGOT PASSWORD MODAL -->
+        <div id="forgot-password-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm hidden">
+          <div class="cyber-glass rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-2xl relative border border-cyber-cyan/40 bg-[#0B111A]">
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-cyber-cyan/15 border border-cyber-cyan/40 flex items-center justify-center text-cyber-cyan">
+                  <span class="material-symbols-outlined text-[22px]">key</span>
+                </div>
+                <div>
+                  <h3 class="text-lg font-bold text-on-surface">Forgot Password</h3>
+                  <p class="text-xs text-on-surface-variant">Reset your PowerSense account password</p>
+                </div>
+              </div>
+              <button id="close-forgot-modal-btn" class="text-on-surface-variant hover:text-on-surface p-1.5 rounded-lg transition-colors">
+                <span class="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <div id="forgot-modal-form-area" class="space-y-4">
+              <p class="text-xs text-on-surface-variant leading-relaxed">
+                Enter your registered email address. We will verify your account and email you a secure link from <strong class="text-cyber-emerald">powersense2026@gmail.com</strong>.
+              </p>
+
+              <div id="forgot-error-msg" class="hidden p-3 bg-cyber-crimson/15 border border-cyber-crimson/40 rounded-xl text-cyber-crimson text-xs font-semibold flex items-center gap-2">
+                <span class="material-symbols-outlined text-[16px]">error</span>
+                <span id="forgot-error-text">Please enter a valid email.</span>
+              </div>
+
+              <!-- Not Registered Prompt Box -->
+              <div id="forgot-not-registered-box" class="hidden p-4 bg-amber-500/15 border border-amber-500/40 rounded-2xl">
+                <div class="flex items-center gap-2 text-amber-400 font-bold text-xs mb-1">
+                  <span class="material-symbols-outlined text-[18px]">person_add</span>
+                  <span>Account Not Found</span>
+                </div>
+                <p class="text-xs text-amber-300 leading-relaxed mb-3">
+                  No account was found with this email address. Please register to create an account.
+                </p>
+                <button id="forgot-register-now-btn" class="w-full bg-cyber-emerald hover:bg-emerald-400 text-space-void font-bold text-xs py-2.5 rounded-xl transition-all flex items-center justify-center gap-2">
+                  Register New Account
+                  <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+                </button>
+              </div>
+
+              <div class="space-y-1">
+                <label class="font-mono text-[10px] font-bold text-on-surface-variant uppercase tracking-wider" for="forgot-email">YOUR REGISTERED EMAIL</label>
+                <div class="relative group">
+                  <div class="absolute inset-y-0 left-0 pl-md flex items-center pointer-events-none text-on-surface-variant group-focus-within:text-cyber-cyan transition-colors">
+                    <span class="material-symbols-outlined text-[20px]">mail</span>
+                  </div>
+                  <input class="w-full bg-obsidian border border-outline-variant text-on-surface rounded-xl pl-[44px] py-md font-mono text-sm focus:ring-1 focus:ring-cyber-cyan focus:border-cyber-cyan outline-none transition-all" id="forgot-email" placeholder="e.g. name@domain.com" type="email" required />
+                </div>
+              </div>
+
+              <button id="submit-forgot-btn" class="w-full bg-cyber-cyan hover:bg-cyan-400 text-space-void font-extrabold text-sm py-3.5 rounded-xl transition-all flex items-center justify-center gap-2" type="button">
+                Send Reset Link
+                <span class="material-symbols-outlined text-[18px]">send</span>
+              </button>
+            </div>
+
+            <div id="forgot-modal-success-area" class="hidden text-center py-4 space-y-3">
+              <div class="w-14 h-14 mx-auto rounded-full bg-cyber-emerald/20 border border-cyber-emerald/50 flex items-center justify-center text-cyber-emerald">
+                <span class="material-symbols-outlined text-[32px]">check_circle</span>
+              </div>
+              <h4 class="text-base font-bold text-on-surface">Check Your Inbox!</h4>
+              <p class="text-xs text-on-surface-variant leading-relaxed">
+                We sent password reset instructions from <strong class="text-cyber-emerald">powersense2026@gmail.com</strong> to <strong id="forgot-success-target-email" class="text-on-surface"></strong>.
+              </p>
+              <p class="text-[11px] text-on-surface-variant">
+                Click the link in your email to choose a new password. (Check spam/junk if not received within 1 minute).
+              </p>
+              <button id="forgot-success-close-btn" class="w-full mt-2 bg-cyber-emerald hover:bg-emerald-400 text-space-void font-bold text-sm py-3 rounded-xl transition-all">
+                Return to Sign In
+              </button>
             </div>
           </div>
         </div>
@@ -1082,7 +1164,7 @@
 
           <div class="relative z-10 flex items-center gap-xs font-mono text-xs text-on-surface-variant">
             <span class="material-symbols-outlined text-cyber-emerald text-[18px]">verified_user</span>
-            <span>FastAPI + PostgreSQL tbl_user Pipeline</span>
+            <span>FastAPI + PostgreSQL Secured Pipeline</span>
           </div>
         </section>
 
@@ -1270,7 +1352,7 @@
                 </tr>
               </thead>
               <tbody id="admin-user-table-body" class="divide-y divide-outline-variant/40 font-mono">
-                <tr><td colspan="6" class="p-lg text-center text-on-surface-variant">Loading user dataset from PostgreSQL tbl_user...</td></tr>
+                <tr><td colspan="6" class="p-lg text-center text-on-surface-variant">Loading user dataset...</td></tr>
               </tbody>
             </table>
           </div>
@@ -1442,6 +1524,107 @@
       };
     }
 
+    // Forgot Password Modal Handlers
+    const forgotModal = document.getElementById('forgot-password-modal');
+    const openForgotBtn = document.getElementById('open-forgot-pass-btn');
+    const closeForgotBtn = document.getElementById('close-forgot-modal-btn');
+    const forgotEmailInput = document.getElementById('forgot-email');
+    const submitForgotBtn = document.getElementById('submit-forgot-btn');
+    const forgotErrorBox = document.getElementById('forgot-error-msg');
+    const forgotErrorText = document.getElementById('forgot-error-text');
+    const notRegisteredBox = document.getElementById('forgot-not-registered-box');
+    const forgotRegisterBtn = document.getElementById('forgot-register-now-btn');
+    const forgotFormArea = document.getElementById('forgot-modal-form-area');
+    const forgotSuccessArea = document.getElementById('forgot-modal-success-area');
+    const successTargetEmail = document.getElementById('forgot-success-target-email');
+    const successCloseBtn = document.getElementById('forgot-success-close-btn');
+
+    const openForgotModal = () => {
+      if (forgotModal) {
+        forgotModal.classList.remove('hidden');
+        if (forgotEmailInput) {
+          const currentEmail = document.getElementById('login-email')?.value?.trim() || '';
+          forgotEmailInput.value = currentEmail;
+        }
+        if (forgotErrorBox) forgotErrorBox.classList.add('hidden');
+        if (notRegisteredBox) notRegisteredBox.classList.add('hidden');
+        if (forgotFormArea) forgotFormArea.classList.remove('hidden');
+        if (forgotSuccessArea) forgotSuccessArea.classList.add('hidden');
+      }
+    };
+
+    const closeForgotModal = () => {
+      if (forgotModal) forgotModal.classList.add('hidden');
+    };
+
+    if (openForgotBtn) openForgotBtn.onclick = openForgotModal;
+    if (closeForgotBtn) closeForgotBtn.onclick = closeForgotModal;
+    if (successCloseBtn) successCloseBtn.onclick = closeForgotModal;
+
+    if (forgotRegisterBtn) {
+      forgotRegisterBtn.onclick = () => {
+        closeForgotModal();
+        store.setPage('register');
+      };
+    }
+
+    if (submitForgotBtn && forgotEmailInput) {
+      submitForgotBtn.onclick = async () => {
+        const emailVal = forgotEmailInput.value.trim().toLowerCase();
+        if (!emailVal || !emailVal.includes('@') || !emailVal.includes('.')) {
+          if (forgotErrorBox && forgotErrorText) {
+            forgotErrorText.innerText = 'Please enter a valid email address.';
+            forgotErrorBox.classList.remove('hidden');
+          }
+          return;
+        }
+
+        if (forgotErrorBox) forgotErrorBox.classList.add('hidden');
+        if (notRegisteredBox) notRegisteredBox.classList.add('hidden');
+
+        submitForgotBtn.disabled = true;
+        submitForgotBtn.innerHTML = `<span>Verifying & Sending...</span>`;
+
+        try {
+          const resp = await fetch('http://localhost:8000/api/auth/forgot-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: emailVal })
+          });
+          const data = await resp.json();
+
+          if (!resp.ok) {
+            throw new Error(data.detail || data.message || 'Failed to process password reset.');
+          }
+
+          if (data.is_registered === false) {
+            if (notRegisteredBox) notRegisteredBox.classList.remove('hidden');
+          } else {
+            if (forgotFormArea) forgotFormArea.classList.add('hidden');
+            if (forgotSuccessArea) forgotSuccessArea.classList.remove('hidden');
+            if (successTargetEmail) successTargetEmail.innerText = emailVal;
+          }
+        } catch (err) {
+          const msg = err.message || '';
+          if (
+            msg.toLowerCase().includes('not found') ||
+            msg.toLowerCase().includes('not registered') ||
+            msg.toLowerCase().includes('no account')
+          ) {
+            if (notRegisteredBox) notRegisteredBox.classList.remove('hidden');
+          } else {
+            if (forgotErrorBox && forgotErrorText) {
+              forgotErrorText.innerText = msg || 'Failed to send reset link. Please try again.';
+              forgotErrorBox.classList.remove('hidden');
+            }
+          }
+        } finally {
+          submitForgotBtn.disabled = false;
+          submitForgotBtn.innerHTML = `<span>Send Reset Link</span> <span class="material-symbols-outlined text-[18px]">send</span>`;
+        }
+      };
+    }
+
     // Register Form Submit
     const regForm = document.getElementById('register-form');
     if (regForm) {
@@ -1518,6 +1701,118 @@
 
     const btnCloseCopilot = document.getElementById('btn-close-copilot');
     if (btnCloseCopilot) btnCloseCopilot.onclick = () => store.toggleCopilotDrawer(false);
+
+    // PDF Report Generator Modal Handlers
+    const btnExportPdf = document.getElementById('btn-export-pdf-report');
+    if (btnExportPdf) {
+      btnExportPdf.onclick = () => {
+        let modal = document.getElementById('pdf-report-modal');
+        if (!modal) {
+          modal = document.createElement('div');
+          modal.id = 'pdf-report-modal';
+          modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fadeIn';
+          modal.innerHTML = `
+            <div class="glass-card w-full max-w-lg p-lg rounded-2xl border border-outline-variant shadow-2xl space-y-md relative bg-surface-container-lowest text-on-surface">
+              <div class="flex justify-between items-center border-b border-outline-variant/60 pb-sm">
+                <div class="flex items-center gap-xs">
+                  <span class="material-symbols-outlined text-primary text-2xl">picture_as_pdf</span>
+                  <h3 class="font-headline-md text-lg font-bold">Generate Usage PDF Report</h3>
+                </div>
+                <button id="btn-close-pdf-modal" class="text-on-surface-variant hover:text-on-surface p-xs rounded-lg hover:bg-surface-container/60 cursor-pointer">
+                  <span class="material-symbols-outlined">close</span>
+                </button>
+              </div>
+
+              <div class="space-y-md text-sm">
+                <div>
+                  <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Select Period</label>
+                  <select id="pdf-period-select" class="w-full bg-surface-container border border-outline-variant rounded-xl p-sm text-on-surface focus:outline-none focus:border-primary">
+                    <option value="day">Today (24 Hours)</option>
+                    <option value="week" selected>Past 7 Days</option>
+                    <option value="month">Current Month (30 Days)</option>
+                    <option value="year">Full Year (365 Days)</option>
+                  </select>
+                </div>
+
+                <div class="space-y-xs pt-xs">
+                  <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider">Report Sections</label>
+                  <label class="flex items-center gap-xs text-on-surface text-xs cursor-pointer select-none">
+                    <input type="checkbox" id="pdf-inc-anomalies" checked class="rounded border-outline-variant text-primary focus:ring-primary accent-primary" />
+                    <span>Include Flagged Anomaly Logs & Voltage Surges</span>
+                  </label>
+                  <label class="flex items-center gap-xs text-on-surface text-xs cursor-pointer select-none">
+                    <input type="checkbox" id="pdf-inc-ai" checked class="rounded border-outline-variant text-primary focus:ring-primary accent-primary" />
+                    <span>Include AI Energy Savings Recommendations</span>
+                  </label>
+                </div>
+
+                <div class="p-sm bg-surface-container-high/60 rounded-xl border border-outline-variant text-xs text-on-surface-variant space-y-1">
+                  <p class="font-bold text-on-surface flex items-center gap-1">
+                    <span class="material-symbols-outlined text-xs text-primary">verified</span>
+                    Includes Verified Telemetry Data:
+                  </p>
+                  <p class="text-[11px]">• RMS Voltage & Active Current Logs</p>
+                  <p class="text-[11px]">• Peak Active Power (W) & Power Factor (cos φ)</p>
+                  <p class="text-[11px]">• Appliance Category kWh Distribution & Tariff Costs</p>
+                </div>
+              </div>
+
+              <div class="flex justify-end gap-sm border-t border-outline-variant/60 pt-sm">
+                <button id="btn-cancel-pdf-modal" class="px-md py-xs rounded-xl border border-outline-variant text-on-surface-variant hover:bg-surface-container font-medium text-xs cursor-pointer">
+                  Cancel
+                </button>
+                <button id="btn-download-pdf-confirm" class="flex items-center gap-xs px-md py-xs rounded-xl bg-primary text-space-void font-bold text-xs shadow hover:bg-primary-dark transition-all cursor-pointer">
+                  <span class="material-symbols-outlined text-sm">download</span>
+                  <span id="pdf-btn-label">Download PDF Report</span>
+                </button>
+              </div>
+            </div>
+          `;
+          document.body.appendChild(modal);
+
+          const closeModal = () => modal.classList.add('hidden');
+          document.getElementById('btn-close-pdf-modal').onclick = closeModal;
+          document.getElementById('btn-cancel-pdf-modal').onclick = closeModal;
+
+          document.getElementById('btn-download-pdf-confirm').onclick = async () => {
+            const btn = document.getElementById('btn-download-pdf-confirm');
+            const label = document.getElementById('pdf-btn-label');
+            const period = document.getElementById('pdf-period-select').value;
+            const incAnom = document.getElementById('pdf-inc-anomalies').checked;
+            const incAi = document.getElementById('pdf-inc-ai').checked;
+
+            btn.disabled = true;
+            label.innerText = 'Generating PDF...';
+
+            try {
+              const url = `http://localhost:8000/api/reports/usage/pdf?period=${period}&include_anomalies=${incAnom}&include_ai=${incAi}`;
+              const resp = await fetch(url);
+              if (!resp.ok) throw new Error('API failed');
+
+              const blob = await resp.blob();
+              const blobUrl = window.URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = blobUrl;
+              a.download = `PowerSense_Usage_Report_${period}.pdf`;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              window.URL.revokeObjectURL(blobUrl);
+              closeModal();
+            } catch (err) {
+              console.warn('Backend PDF endpoint unavailable, generating client print version', err);
+              window.print();
+              closeModal();
+            } finally {
+              btn.disabled = false;
+              label.innerText = 'Download PDF Report';
+            }
+          };
+        } else {
+          modal.classList.remove('hidden');
+        }
+      };
+    }
 
     // Nav buttons
     document.querySelectorAll('.nav-btn').forEach(btn => {

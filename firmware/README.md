@@ -1,22 +1,42 @@
 # 🔌 PowerSense ESP32 Firmware & Hardware Setup Guide
 
-This folder contains the complete, production-ready firmware to flash onto your physical **ESP32 Dev Module** connected to the **PZEM-004T v3 Energy Sensor** and a **Relay Module**.
+This folder contains the complete, production-ready firmware for your **PowerSense IoT Hardware Node**, customized for your specific component kit:
+
+1. **ESP-WROOM-32 WIFI Bluetooth Board** (SKU: 835800)
+2. **Peacefair PZEM-004T AC meter** (SKU: R154877)
+3. **Hi Link HLK-PM01 5V/3W AC-DC Power Supply Module** (SKU: 211849)
+4. **5V Dual Channel Relay Module with Optocoupler** (SKU: 31557)
+5. **MB102 830-Point Breadboard** (SKU: 24438)
+6. **Male to Male, Male to Female, and Female to Female Jumper Wires** (SKUs: 7447, 7450, 44299)
 
 ---
 
-## 1. Hardware Pinout & Wiring Connections
+## 1. Complete Pinout & Wiring Guide
 
-| ESP32 Pin | Connected Peripheral | Peripheral Pin | Notes |
-|:---|:---|:---|:---|
-| **GPIO 16 (RX2)** | PZEM-004T v3 Energy Sensor | **TX** | Serial2 TTL UART |
-| **GPIO 17 (TX2)** | PZEM-004T v3 Energy Sensor | **RX** | Serial2 TTL UART |
-| **5V / VIN** | PZEM-004T & Relay Module | **VCC** | 5V Power Supply |
-| **GND** | PZEM-004T & Relay Module | **GND** | Common Ground |
-| **GPIO 26** | 10A / 16A Relay Module | **IN / Signal** | Active HIGH Relay Trigger |
-| **GPIO 0 (BOOT)** | Built-in BOOT Button | **-** | Hold for 5s to reset Wi-Fi & re-enter BLE |
-| **GPIO 2 (LED)** | Built-in Blue LED | **-** | Blinks in BLE mode, Solid on Wi-Fi |
+### A. Power Distribution (HLK-PM01 5V/3W AC-DC Module)
+- **AC Input (AC-L & AC-N)**: Connect to 110V-230V AC Mains Live and Neutral.
+- **DC Output +5V**: Connect to MB102 Breadboard **Red (+5V) Rail**.
+- **DC Output GND**: Connect to MB102 Breadboard **Blue (GND) Rail**.
 
-> ⚠️ **Safety Note for PZEM-004T**: Connect the PZEM high-voltage screw terminals (`L` and `N`) only to 230V AC mains through an enclosed socket with proper insulation. The Current Transformer (CT) coil must be clamped around only one line conductor (Live or Neutral), never both together.
+### B. Module Interconnections
+
+| Module | Pin | Connects To | Jumper Wire Type | Notes |
+|:---|:---|:---|:---|:---|
+| **ESP32** | **5V / VIN** | Breadboard Red Rail (+5V) | Male-to-Male / Male-to-Female | Powered via HLK-PM01 |
+| **ESP32** | **GND** | Breadboard Blue Rail (GND) | Male-to-Male / Male-to-Female | Common System Ground |
+| **ESP32** | **GPIO 16 (RX2)** | PZEM-004T **TX** | Male-to-Female | TTL UART Serial Communication |
+| **ESP32** | **GPIO 17 (TX2)** | PZEM-004T **RX** | Male-to-Female | TTL UART Serial Communication |
+| **ESP32** | **GPIO 26** | Relay Module **IN1** | Male-to-Female | Relay Channel 1 Control (Primary Load) |
+| **ESP32** | **GPIO 27** | Relay Module **IN2** | Male-to-Female | Relay Channel 2 Control (Aux Load) |
+| **PZEM-004T** | **VCC (+5V)** | Breadboard Red Rail (+5V) | Male-to-Female / Female-to-Female | Sensor TTL Logic Power |
+| **PZEM-004T** | **GND** | Breadboard Blue Rail (GND) | Male-to-Female / Female-to-Female | Sensor TTL Ground |
+| **5V Dual Relay** | **VCC** | Breadboard Red Rail (+5V) | Female-to-Female / Male-to-Female | Relay Optocoupler VCC |
+| **5V Dual Relay** | **GND** | Breadboard Blue Rail (GND) | Female-to-Female / Male-to-Female | Relay Optocoupler Ground |
+
+> ⚠️ **Wiring Note for PZEM-004T Variants**: 
+> - **10A Version (Internal Shunt - `10A max` printed on PCB)**: Does **NOT** use an external CT coil ring! Current is measured via an internal sampling shunt resistor. Connect AC Live & Neutral to Terminals 1 & 2 for voltage, and pass the Load Live wire in series through Terminals 3 & 4.
+> - **100A Version (External CT Coil)**: Uses an external clamp ring. Connect AC Live & Neutral to Terminals 1 & 2 for voltage, and connect the 2 green/white wires from the CT coil to Terminals 3 & 4 (clamped around one Live wire).
+> - Always connect high-voltage AC mains (`L` and `N`) inside an insulated enclosure.
 
 ---
 
@@ -48,41 +68,21 @@ Select the following under the **Tools** menu:
 - **Upload Speed**: `921600` or `115200`
 - **Partition Scheme**: `Huge APP (3MB No OTA/1MB SPIFFS)` *(Recommended for BLE)*
 - **Flash Frequency**: `80MHz`
-- **Core Debug Level**: `None` or `Info`
 
 ---
 
 ### Step 4: Flash the Firmware
 1. Open [`firmware/PowerSense_ESP32_BLE_Provision.ino`](PowerSense_ESP32_BLE_Provision.ino).
-2. Update `BACKEND_SERVER_IP` (line 33) to your PC's local Wi-Fi IP address (e.g. `192.168.1.100`).
+2. Update `BACKEND_SERVER_IP` (line 34) to your PC's local Wi-Fi IP address (e.g. `192.168.1.100`).
 3. Click the **Upload** (➡️) button in Arduino IDE.
-4. If the console shows `Connecting........_____.....`, press and hold the physical **BOOT** button on the ESP32 board for 2 seconds until the upload starts.
+4. Press physical **BOOT** button on ESP32 if `Connecting........` appears.
 
 ---
 
-## 3. Provisioning Over BLE with PowerSense App
+## 3. Provisioning & App Dashboard Controls
 
-1. Once uploaded, open **Tools → Serial Monitor** at **115200 baud**.
-2. You will see:
-   ```
-   ==============================================
-      PowerSense AI Smart Plug - Hardware Node   
-   ==============================================
-   [BLE Provisioning] Active! Advertised Name: PowerSense-PLUG-A12345
-   [BLE Provisioning] Open PowerSense Mobile App -> Tap '+ Add BLE' to pair.
-   ```
-3. Open the **PowerSense App** in your browser (`http://localhost:8081`) or mobile phone.
-4. On the **Home Dashboard**, tap **`+ Add BLE`** or the **"Pair New Smart Plug"** card.
-5. Tap **"Scan for Nearby Plugs"**:
-   - The browser / app triggers Web Bluetooth to scan and detect your physical ESP32.
-   - Select `PowerSense-PLUG-A12345`.
-   - Select your Home Wi-Fi network and enter the password.
-   - Tap **Send Wi-Fi Credentials via BLE**.
-6. The ESP32 receives the credentials, saves them to NVS flash, connects to your router, and immediately starts streaming real 1.0 Hz PZEM telemetry!
-
----
-
-## 4. Resetting Wi-Fi (Factory Reset)
-To switch to a different Wi-Fi network:
-- Press and hold the physical **BOOT** button on the ESP32 for **5 seconds**.
-- The on-board LED will flash rapidly and the ESP32 will restart into BLE provisioning mode.
+1. Open **Tools → Serial Monitor** at **115200 baud**.
+2. Look for: `[BLE Provisioning] Active! Advertised Name: PowerSense-PLUG-A12345`.
+3. Open the **PowerSense Mobile App** (`http://localhost:8081` or mobile phone).
+4. Tap **`+ Add BLE`** or use the **"Hardware Kit & Wiring Guide"** card on the Home Dashboard.
+5. You can now toggle **Relay CH1** (Primary Load) and **Relay CH2** (Auxiliary Load) independently directly from the PowerSense mobile interface!

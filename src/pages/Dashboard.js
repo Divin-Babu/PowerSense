@@ -110,13 +110,13 @@ export function Dashboard() {
         ${appliances.length > 0 ? `
           <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-grid-gutter">
             ${appliances.map(app => {
-              const isActive = app.status === 'Active';
-              const isAnomaly = app.isAnomaly;
+    const isActive = app.status === 'Active';
+    const isAnomaly = app.isAnomaly;
 
-              let cardBorder = 'border-outline-variant hover:border-primary';
-              if (isAnomaly) cardBorder = 'border-error/60 hover:border-error';
+    let cardBorder = 'border-outline-variant hover:border-primary';
+    if (isAnomaly) cardBorder = 'border-error/60 hover:border-error';
 
-              return `
+    return `
                 <div class="dash-card glass-card rounded-xl p-lg border ${cardBorder} transition-all duration-300 relative overflow-hidden group">
                   ${isAnomaly ? `
                     <div class="absolute top-0 right-0 p-sm">
@@ -147,7 +147,7 @@ export function Dashboard() {
                   </div>
                 </div>
               `;
-            }).join('')}
+  }).join('')}
           </div>
         ` : `
           <!-- Clean Hardware Ready Standby Card -->

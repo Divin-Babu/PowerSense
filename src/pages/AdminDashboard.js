@@ -155,7 +155,7 @@ export function AdminDashboard() {
       <div id="tab-users" class="admin-tab-content hidden space-y-md">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-sm">
           <div>
-            <h2 class="text-lg font-bold text-on-surface">Registered User Accounts (tbl_user)</h2>
+            <h2 class="text-lg font-bold text-on-surface">Registered User Accounts</h2>
             <p class="font-sans text-xs text-on-surface-variant">Manage permissions, promote users to admin, or remove accounts.</p>
           </div>
           <div class="flex items-center gap-xs">
@@ -180,7 +180,7 @@ export function AdminDashboard() {
             </thead>
             <tbody id="admin-user-table-body" class="divide-y divide-outline-variant/40 font-mono">
               <tr>
-                <td colspan="6" class="p-lg text-center text-on-surface-variant">Loading user dataset from PostgreSQL tbl_user...</td>
+                <td colspan="6" class="p-lg text-center text-on-surface-variant">Loading user dataset...</td>
               </tr>
             </tbody>
           </table>
@@ -274,7 +274,7 @@ export function AdminDashboard() {
             <h3 class="font-bold text-sm text-on-surface uppercase tracking-wide">Live Diagnostics Terminal</h3>
             <div class="p-md rounded-xl bg-obsidian text-cyber-emerald font-mono text-[11px] h-48 overflow-y-auto space-y-1 border border-white/5" id="admin-log-terminal">
               <div>[INFO] System initialized at 1.0Hz telemetry rate.</div>
-              <div>[INFO] PostgreSQL connection pool active (tbl_user verified).</div>
+              <div>[INFO] PostgreSQL connection pool active.</div>
               <div>[INFO] MQTT Broker listening on port 1883.</div>
               <div>[AUTH] Admin credentials verified with role='admin'.</div>
               <div>[AI] ML Anomaly Detector loaded with threshold baseline.</div>
@@ -393,13 +393,13 @@ export function bindAdminEvents() {
   async function loadUsers() {
     const tableBody = document.getElementById('admin-user-table-body');
     if (!tableBody) return;
-    tableBody.innerHTML = `<tr><td colspan="6" class="p-lg text-center text-on-surface-variant">Fetching users from PostgreSQL tbl_user...</td></tr>`;
+    tableBody.innerHTML = `<tr><td colspan="6" class="p-lg text-center text-on-surface-variant">Fetching users...</td></tr>`;
 
     try {
       const data = await fetchAdminUsers();
       const users = data.users || [];
       if (users.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="6" class="p-lg text-center text-on-surface-variant">No registered users found in PostgreSQL tbl_user.</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="6" class="p-lg text-center text-on-surface-variant">No registered users found.</td></tr>`;
         return;
       }
 

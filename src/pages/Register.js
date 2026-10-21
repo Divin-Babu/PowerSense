@@ -196,7 +196,7 @@ export function Register() {
         </div>
         <div class="space-y-xs">
           <h3 class="font-bold text-on-surface text-lg">Account Provisioned</h3>
-          <p class="font-mono text-xs text-on-surface-variant">Saving credentials to PostgreSQL tbl_user...</p>
+          <p class="font-mono text-xs text-on-surface-variant">Saving your account credentials securely...</p>
         </div>
       </div>
     </div>

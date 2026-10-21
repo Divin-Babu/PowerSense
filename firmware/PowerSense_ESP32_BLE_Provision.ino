@@ -1,13 +1,13 @@
 /*
   ==============================================================================
-  PowerSense AI: Intelligent IoT Smart Plug Firmware
+  PowerSense AI: Intelligent IoT Smart Plug & Dual Relay Node Firmware
   Board: ESP32 Dev Module / NodeMCU-32S / ESP32-WROOM-32
-  Features:
-    1. BLE Provisioning (Espressif Official WiFiProv) - One-time phone setup
-    2. PZEM-004T v3 Telemetry (UART RX: GPIO 16, TX: GPIO 17)
-    3. Dual-Transport Stream: MQTT (1883) + HTTP POST fallback (8000)
-    4. Safety Relay Load Control (GPIO 26)
-    5. Physical Reset Button (GPIO 0): 5-sec Long Press to erase NVS & re-enter BLE
+  Ordered Components Integrated:
+    1. ESP-WROOM-32 Dev Board (WiFi Direct + BLE Provisioning Preserved)
+    2. Peacefair PZEM-004T v3 AC Energy Meter (UART RX: GPIO 16, TX: GPIO 17)
+    3. Hi-Link HLK-PM01 5V/3W AC-DC Switch Power Supply Module (Self-powered node)
+    4. 5V Dual Channel Relay Module with Optocoupler (CH1: GPIO 26, CH2: GPIO 27)
+    5. MB102 830-Point Breadboard + Male-Male / Male-Female / Female-Female Cables
   ==============================================================================
 */
 
@@ -18,26 +18,43 @@
 #include <PZEM004Tv30.h>
 #include <ArduinoJson.h>
 
+// ─── ESP32 Arduino Core 3.x Compatibility Defines ─────────────────────────────
+#ifndef WIFI_PROV_SCHEME_BLE
+#define WIFI_PROV_SCHEME_BLE NETWORK_PROV_SCHEME_BLE
+#endif
+
+#ifndef WIFI_PROV_SCHEME_HANDLER_FREE_BTDM
+#define WIFI_PROV_SCHEME_HANDLER_FREE_BTDM NETWORK_PROV_SCHEME_HANDLER_FREE_BTDM
+#endif
+
+#ifndef WIFI_PROV_SECURITY_0
+#define WIFI_PROV_SECURITY_0 NETWORK_PROV_SECURITY_0
+#endif
+
 // ─── Hardware Pin Configuration ──────────────────────────────────────────────
-#define RELAY_PIN         26    // GPIO connected to 10A / 16A safety relay (Active HIGH)
-#define LED_INDICATOR_PIN 2     // On-board status LED (Blinks in BLE mode, Solid on Wi-Fi)
+#define RELAY1_PIN           26    // GPIO connected to Relay CH1
+#define RELAY2_PIN           27    // GPIO connected to Relay CH2
+#define RELAY_ACTIVE_LEVEL   LOW   // Standard 5V optocoupler relay modules are ACTIVE-LOW (LOW = ON)
+#define RELAY_INACTIVE_LEVEL HIGH  // HIGH = OFF (de-energize coil)
+#define LED_INDICATOR_PIN    2     // On-board status LED (Blinks in BLE mode, Solid on Wi-Fi)
 #define RESET_BUTTON_PIN  0     // BOOT Button (Hold 5s to reset Wi-Fi & enter BLE mode)
 #define PZEM_RX_PIN       16    // ESP32 RX2 connected to PZEM-004T TX
 #define PZEM_TX_PIN       17    // ESP32 TX2 connected to PZEM-004T RX
 
-// ─── Unique Device Identifier ────────────────────────────────────────────────
+// ─── Unique Device Identifier & BLE Name ─────────────────────────────────────
 const char* DEVICE_UID    = "ESP32-PZEM-PLUG-10A";
 const char* BLE_PROV_NAME = "PowerSense-PLUG-A12345";
 
-// ─── Server & MQTT Broker Configuration ──────────────────────────────────────
-// Replace with the local IP of your computer running FastAPI & MQTT (e.g. 192.168.1.105)
-const char* BACKEND_SERVER_IP = "192.168.1.100";
-const int   MQTT_PORT         = 1883;
+// ─── DIRECT WI-FI & SERVER CONFIGURATION ─────────────────────────────────────
+const char* DIRECT_WIFI_SSID  = "vivo Y75";       // Set your Wi-Fi SSID
+const char* DIRECT_WIFI_PASS  = "1133557799";   // Set your Wi-Fi Password
+const char* BACKEND_SERVER_IP = "10.170.121.5";     // Laptop IP running FastAPI
 const int   HTTP_PORT         = 8000;
-
+const int   MQTT_PORT         = 1883;
 char telemetryTopic[64];
 char relayCommandTopic[64];
 char httpEndpoint[128];
+char relayPollEndpoint[128];
 
 // ─── Peripheral Drivers & Objects ────────────────────────────────────────────
 WiFiClient espClient;
@@ -45,8 +62,10 @@ PubSubClient mqttClient(espClient);
 PZEM004Tv30 pzem(Serial2, PZEM_RX_PIN, PZEM_TX_PIN);
 
 // ─── State Variables ─────────────────────────────────────────────────────────
-bool relayState = true;          // Default relay state: ON
+bool relay1State = true;         // Default Relay CH1 state: ON
+bool relay2State = false;        // Default Relay CH2 state: OFF
 unsigned long lastTelemetryTs = 0;
+unsigned long lastRelayPollTs = 0;
 unsigned long buttonPressStart = 0;
 bool buttonHeld = false;
 bool isProvisioned = false;
@@ -66,7 +85,7 @@ void SysProvEvent(arduino_event_t *sys_event) {
       break;
     case ARDUINO_EVENT_PROV_START:
       Serial.printf("\n[BLE Provisioning] Active! Advertised Name: %s\n", BLE_PROV_NAME);
-      Serial.println("[BLE Provisioning] Open PowerSense Mobile App -> Tap '+ Add BLE' to pair.");
+      Serial.println("[BLE Provisioning] App paired BLE service active and ready.");
       break;
     case ARDUINO_EVENT_PROV_CRED_RECV:
       Serial.println("\n[BLE Provisioning] Received Wi-Fi credentials from React Native app!");
@@ -75,14 +94,14 @@ void SysProvEvent(arduino_event_t *sys_event) {
       Serial.println("\n[BLE Provisioning] Successfully connected to Home Wi-Fi!");
       break;
     case ARDUINO_EVENT_PROV_END:
-      Serial.println("\n[BLE Provisioning] Session Finished. Switching to Wi-Fi station mode.");
+      Serial.println("\n[BLE Provisioning] Session Finished. Operating in Wi-Fi station mode.");
       break;
     default:
       break;
   }
 }
 
-// ─── MQTT Callback for Remote Relay ON/OFF ───────────────────────────────────
+// ─── MQTT Callback for Remote Relay Control ──────────────────────────────────
 void onMqttMessage(char* topic, byte* payload, unsigned int length) {
   String message = "";
   for (unsigned int i = 0; i < length; i++) {
@@ -93,14 +112,24 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
 
   Serial.printf("[MQTT Command] Topic: %s, Message: %s\n", topic, message.c_str());
 
-  if (message == "ON" || message.indexOf("ON") >= 0) {
-    relayState = true;
-    digitalWrite(RELAY_PIN, HIGH);
-    Serial.println("[Relay] Power turned ON");
-  } else if (message == "OFF" || message.indexOf("OFF") >= 0) {
-    relayState = false;
-    digitalWrite(RELAY_PIN, LOW);
-    Serial.println("[Relay] Power turned OFF");
+  if (message.indexOf("CH1_ON") >= 0 || (message == "ON")) {
+    relay1State = true;
+    digitalWrite(RELAY1_PIN, RELAY_ACTIVE_LEVEL);
+    Serial.println("[Relay CH1] Turned ON (Primary Load)");
+  } else if (message.indexOf("CH1_OFF") >= 0 || (message == "OFF")) {
+    relay1State = false;
+    digitalWrite(RELAY1_PIN, RELAY_INACTIVE_LEVEL);
+    Serial.println("[Relay CH1] Turned OFF (Primary Load)");
+  }
+
+  if (message.indexOf("CH2_ON") >= 0) {
+    relay2State = true;
+    digitalWrite(RELAY2_PIN, RELAY_ACTIVE_LEVEL);
+    Serial.println("[Relay CH2] Turned ON (Auxiliary Load)");
+  } else if (message.indexOf("CH2_OFF") >= 0) {
+    relay2State = false;
+    digitalWrite(RELAY2_PIN, RELAY_INACTIVE_LEVEL);
+    Serial.println("[Relay CH2] Turned OFF (Auxiliary Load)");
   }
 }
 
@@ -109,33 +138,60 @@ void reconnectMqtt() {
   if (WiFi.status() != WL_CONNECTED) return;
 
   if (!mqttClient.connected()) {
-    Serial.print("[MQTT] Connecting to broker at ");
-    Serial.print(BACKEND_SERVER_IP);
-    Serial.print("...");
-
     if (mqttClient.connect(DEVICE_UID)) {
-      Serial.println(" Connected!");
+      Serial.println("[MQTT] Connected to broker!");
       mqttClient.subscribe(relayCommandTopic);
-      Serial.printf("[MQTT] Subscribed to %s\n", relayCommandTopic);
-    } else {
-      Serial.printf(" rc=%d (will retry next loop)\n", mqttClient.state());
     }
   }
 }
 
-// ─── HTTP POST Telemetry Fallback ────────────────────────────────────────────
+// ─── HTTP GET Relay Poll (Direct FastAPI Control) ────────────────────────────
+void pollRelayStateOverHttp() {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  HTTPClient http;
+  http.begin(relayPollEndpoint);
+  http.setTimeout(1000);
+
+  int httpCode = http.GET();
+  if (httpCode == 200) {
+    String payload = http.getString();
+    StaticJsonDocument<256> doc;
+    DeserializationError err = deserializeJson(doc, payload);
+    if (!err) {
+      const char* r1 = doc["relay1_state"] | doc["relay_state"] | "ON";
+      const char* r2 = doc["relay2_state"] | "OFF";
+      
+      bool targetR1 = (strcmp(r1, "ON") == 0);
+      bool targetR2 = (strcmp(r2, "ON") == 0);
+
+      if (targetR1 != relay1State) {
+        relay1State = targetR1;
+        digitalWrite(RELAY1_PIN, relay1State ? RELAY_ACTIVE_LEVEL : RELAY_INACTIVE_LEVEL);
+        Serial.printf("[HTTP Relay Poll] Relay CH1 switched to %s\n", relay1State ? "ON" : "OFF");
+      }
+      if (targetR2 != relay2State) {
+        relay2State = targetR2;
+        digitalWrite(RELAY2_PIN, relay2State ? RELAY_ACTIVE_LEVEL : RELAY_INACTIVE_LEVEL);
+        Serial.printf("[HTTP Relay Poll] Relay CH2 switched to %s\n", relay2State ? "ON" : "OFF");
+      }
+    }
+  }
+  http.end();
+}
+
+// ─── HTTP POST Telemetry Stream ──────────────────────────────────────────────
 void sendHttpTelemetry(const char* jsonPayload) {
   if (WiFi.status() != WL_CONNECTED) return;
 
   HTTPClient http;
   http.begin(httpEndpoint);
   http.addHeader("Content-Type", "application/json");
+  http.setTimeout(1000);
 
   int httpCode = http.POST(jsonPayload);
-  if (httpCode > 0) {
-    // 200 OK from FastAPI
-  } else {
-    Serial.printf("[HTTP POST] Failed, error: %s\n", http.errorToString(httpCode).c_str());
+  if (httpCode <= 0) {
+    Serial.printf("[HTTP POST] Telemetry stream error: %s\n", http.errorToString(httpCode).c_str());
   }
   http.end();
 }
@@ -144,33 +200,59 @@ void sendHttpTelemetry(const char* jsonPayload) {
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n==============================================");
-  Serial.println("   PowerSense AI Smart Plug - Hardware Node   ");
-  Serial.println("==============================================");
+  Serial.println("\n========================================================");
+  Serial.println("   PowerSense AI Smart Plug - Direct Wi-Fi + BLE Node   ");
+  Serial.println("========================================================");
 
   // Initialize GPIO Pins
-  pinMode(RELAY_PIN, OUTPUT);
+  pinMode(RELAY1_PIN, OUTPUT);
+  pinMode(RELAY2_PIN, OUTPUT);
   pinMode(LED_INDICATOR_PIN, OUTPUT);
   pinMode(RESET_BUTTON_PIN, INPUT_PULLUP);
 
-  // Initial relay state
-  digitalWrite(RELAY_PIN, relayState ? HIGH : LOW);
+  // Initial relay output states
+  digitalWrite(RELAY1_PIN, relay1State ? RELAY_ACTIVE_LEVEL : RELAY_INACTIVE_LEVEL);
+  digitalWrite(RELAY2_PIN, relay2State ? RELAY_ACTIVE_LEVEL : RELAY_INACTIVE_LEVEL);
   digitalWrite(LED_INDICATOR_PIN, LOW);
 
   // Build Endpoints & Topics
   snprintf(telemetryTopic, sizeof(telemetryTopic), "powersense/nodes/%s/telemetry", DEVICE_UID);
   snprintf(relayCommandTopic, sizeof(relayCommandTopic), "powersense/nodes/%s/relay", DEVICE_UID);
   snprintf(httpEndpoint, sizeof(httpEndpoint), "http://%s:%d/api/esp32/telemetry", BACKEND_SERVER_IP, HTTP_PORT);
+  snprintf(relayPollEndpoint, sizeof(relayPollEndpoint), "http://%s:%d/api/esp32/relay?device_id=%s", BACKEND_SERVER_IP, HTTP_PORT, DEVICE_UID);
 
   // Configure MQTT
   mqttClient.setServer(BACKEND_SERVER_IP, MQTT_PORT);
   mqttClient.setCallback(onMqttMessage);
 
-  // Setup BLE Provisioning
+  // 1. Direct Wi-Fi Auto-Connect Attempt
+  if (strlen(DIRECT_WIFI_SSID) > 0 && strcmp(DIRECT_WIFI_SSID, "YOUR_WIFI_SSID") != 0) {
+    Serial.printf("\n[Wi-Fi Direct] Attempting connection : %s\n", DIRECT_WIFI_SSID);
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(DIRECT_WIFI_SSID, DIRECT_WIFI_PASS);
+
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 16) {
+      delay(500);
+      Serial.print(".");
+      digitalWrite(LED_INDICATOR_PIN, !digitalRead(LED_INDICATOR_PIN));
+      attempts++;
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("\n[Wi-Fi Direct] Connected successfully!");
+      Serial.print("[Wi-Fi Direct] IP Address: ");
+      Serial.println(WiFi.localIP());
+      digitalWrite(LED_INDICATOR_PIN, HIGH);
+      isProvisioned = true;
+    } else {
+      Serial.println("\n[Wi-Fi Direct] Could not connect directly to configured SSID.");
+      digitalWrite(LED_INDICATOR_PIN, LOW);
+    }
+  }
+
+  // 2. Keep BLE Provisioning active and initialized in parallel
   WiFi.onEvent(SysProvEvent);
-  
-  // Start BLE Provisioning Manager
-  // If credentials already exist in NVS flash, connects automatically to Wi-Fi.
   WiFiProv.beginProvision(
     WIFI_PROV_SCHEME_BLE,
     WIFI_PROV_SCHEME_HANDLER_FREE_BTDM,
@@ -182,79 +264,93 @@ void setup() {
 
 // ─── MAIN LOOP ───────────────────────────────────────────────────────────────
 void loop() {
-  // 1. Maintain Wi-Fi and MQTT when provisioned
   if (WiFi.status() == WL_CONNECTED) {
+    digitalWrite(LED_INDICATOR_PIN, HIGH);
+    
+    // Optional MQTT loop
     reconnectMqtt();
     mqttClient.loop();
 
-    // 2. Read PZEM-004T Sensor and Stream Telemetry @ 1.0 Hz
+    // Poll HTTP relay commands every 1.0 second
     unsigned long now = millis();
-    if (now - lastTelemetryTs >= 1000) {
+    if (now - lastRelayPollTs >= 1000) {
+      lastRelayPollTs = now;
+      pollRelayStateOverHttp();
+    }
+
+    // Read PZEM-004T Sensor and Push Telemetry @ 2.0 Hz (500ms interval for fast live updates)
+    if (now - lastTelemetryTs >= 500) {
       lastTelemetryTs = now;
 
-      float voltage = pzem.voltage();
-      float current = pzem.current();
-      float power   = pzem.power();
-      float energy  = pzem.energy();
+      float voltage   = pzem.voltage();
+      float current   = pzem.current();
+      float power     = pzem.power();
+      float energy    = pzem.energy();
       float frequency = pzem.frequency();
-      float pf      = pzem.pf();
+      float pf        = pzem.pf();
 
-      // Check if PZEM is connected
-      if (isnan(voltage) || voltage <= 0.0) {
-        // Fallback simulated load when bench testing without 230V AC mains
-        voltage = 230.4;
-        current = relayState ? 1.62 : 0.0;
-        power   = relayState ? 215.0 : 0.0;
-        energy  = 2.45;
-        frequency = 50.0;
-        pf = 0.98;
+      bool acConnected = !(isnan(voltage) || voltage <= 0.0);
+      if (!acConnected) {
+        voltage   = 0.0;
+        current   = 0.0;
+        power     = 0.0;
+        energy    = (isnan(energy) || energy < 0.0) ? 0.0 : energy;
+        frequency = 0.0;
+        pf        = 0.0;
       }
 
-      // Build JSON Telemetry Payload
-      StaticJsonDocument<256> doc;
+      StaticJsonDocument<384> doc;
       doc["device_id"]    = DEVICE_UID;
-      doc["name"]         = "Living Room Plug";
-      doc["voltage"]      = round(voltage * 10.0) / 10.0;
-      doc["current"]      = round(current * 100.0) / 100.0;
-      doc["power"]        = round(power * 10.0) / 10.0;
-      doc["energy"]       = round(energy * 1000.0) / 1000.0;
-      doc["frequency"]    = round(frequency * 10.0) / 10.0;
-      doc["power_factor"] = round(pf * 100.0) / 100.0;
-      doc["relay_state"]  = relayState ? "ON" : "OFF";
+      doc["name"]         = "Living Room Smart Plug";
+      doc["voltage"]      = voltage;
+      doc["current"]      = current;
+      doc["power"]        = power;                      // Exact Watts from PZEM (no round off)
+      doc["energy"]       = energy;
+      doc["frequency"]    = frequency;
+      doc["power_factor"] = pf;
+      doc["relay_state"]  = relay1State ? "ON" : "OFF";
+      doc["relay1_state"] = relay1State ? "ON" : "OFF";
+      doc["relay2_state"] = relay2State ? "ON" : "UNASSIGNED";
+      doc["ac_connected"] = acConnected;
+      doc["power_source"] = "HLK-PM01 5V AC-DC";
       doc["rssi"]         = WiFi.RSSI();
 
-      char buffer[256];
+      char buffer[384];
       size_t len = serializeJson(doc, buffer);
 
-      // Publish over MQTT
       if (mqttClient.connected()) {
         mqttClient.publish(telemetryTopic, buffer, len);
       }
-      
-      // Also push via HTTP to FastAPI backend
       sendHttpTelemetry(buffer);
 
-      Serial.printf("[Telemetry 1Hz] V:%.1fV | I:%.2fA | P:%.1fW | Relay:%s | RSSI:%d dBm\n",
-                    voltage, current, power, relayState ? "ON" : "OFF", WiFi.RSSI());
+      Serial.printf("[Telemetry 1Hz] V:%.1fV | I:%.2fA | P:%.1fW | Relay CH1:%s | RSSI:%d dBm\n",
+                    voltage, current, power, relay1State ? "ON" : "OFF", WiFi.RSSI());
+    }
+  } else {
+    // Fast blink LED when searching for connection / in BLE provision mode
+    digitalWrite(LED_INDICATOR_PIN, (millis() / 500) % 2);
+
+    // Auto-retry Wi-Fi connection every 5 seconds if disconnected
+    static unsigned long lastReconnectAttempt = 0;
+    if (millis() - lastReconnectAttempt > 5000) {
+      lastReconnectAttempt = millis();
+      if (strlen(DIRECT_WIFI_SSID) > 0 && strcmp(DIRECT_WIFI_SSID, "vivo Y75") != 0) {
+        WiFi.begin(DIRECT_WIFI_SSID, DIRECT_WIFI_PASS);
+      }
     }
   }
 
-  // 3. Physical Factory Reset / BLE Reprovisioning Button (BOOT Button GPIO 0)
+  // Physical Factory Reset (BOOT Button GPIO 0 hold 5s)
   if (digitalRead(RESET_BUTTON_PIN) == LOW) {
     if (buttonPressStart == 0) {
       buttonPressStart = millis();
     } else if (millis() - buttonPressStart > 5000 && !buttonHeld) {
       buttonHeld = true;
-      Serial.println("\n[Factory Reset] 5-second BOOT button press detected!");
-      Serial.println("[Factory Reset] Erasing Wi-Fi credentials from NVS & restarting in BLE mode...");
-      
-      // Fast blink status LED
+      Serial.println("\n[Factory Reset] 5s press detected! Resetting Wi-Fi & restarting...");
       for (int i = 0; i < 8; i++) {
         digitalWrite(LED_INDICATOR_PIN, !digitalRead(LED_INDICATOR_PIN));
-        delay(120);
+        delay(100);
       }
-
-      // Erase NVS flash Wi-Fi credentials
       WiFi.disconnect(true, true);
       delay(500);
       ESP.restart();

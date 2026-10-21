@@ -10,13 +10,14 @@ import {
   Platform,
   ActivityIndicator,
   Pressable,
+  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Redirect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useStore } from '../src/store/StoreContext';
-import { loginUser } from '../src/services/api';
+import { loginUser, requestPasswordReset } from '../src/services/api';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -32,6 +33,13 @@ export default function LoginScreen() {
   const [rememberMe, setRememberMe] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Forgot Password Modal State
+  const [isForgotModalVisible, setIsForgotModalVisible] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotStatus, setForgotStatus] = useState<'idle' | 'not_registered' | 'success' | 'error'>('idle');
+  const [forgotFeedbackMessage, setForgotFeedbackMessage] = useState('');
 
   const handleLogin = async () => {
     setErrorMessage('');
@@ -63,6 +71,67 @@ export default function LoginScreen() {
       setIsLoading(false);
       setErrorMessage(err.message || 'Invalid username or password.');
     }
+  };
+
+  const openForgotPasswordModal = () => {
+    setForgotEmail(email.trim() || '');
+    setForgotStatus('idle');
+    setForgotFeedbackMessage('');
+    setIsForgotModalVisible(true);
+  };
+
+  const handleForgotPasswordSubmit = async () => {
+    const cleanEmail = forgotEmail.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+      setForgotStatus('error');
+      setForgotFeedbackMessage('Please enter a valid email address.');
+      return;
+    }
+
+    setForgotLoading(true);
+    setForgotStatus('idle');
+    setForgotFeedbackMessage('');
+
+    try {
+      const res: any = await requestPasswordReset(cleanEmail);
+      setForgotLoading(false);
+
+      if (res && res.is_registered === false) {
+        // Email does not exist in DB -> prompt to register
+        setForgotStatus('not_registered');
+        setForgotFeedbackMessage(
+          res.message || 'This email is not registered with PowerSense. Please register to create an account.'
+        );
+      } else if (res && (res.success || res.is_registered)) {
+        // Email exists in DB -> email sent!
+        setForgotStatus('success');
+        setForgotFeedbackMessage(
+          res.message || `A password reset link has been sent to ${cleanEmail} from powersense2026@gmail.com.`
+        );
+      } else {
+        setForgotStatus('not_registered');
+        setForgotFeedbackMessage('No account found for this email. Please register to get started.');
+      }
+    } catch (err: any) {
+      setForgotLoading(false);
+      const msg = err?.message || '';
+      if (
+        msg.toLowerCase().includes('not found') ||
+        msg.toLowerCase().includes('not registered') ||
+        msg.toLowerCase().includes('no account')
+      ) {
+        setForgotStatus('not_registered');
+        setForgotFeedbackMessage('This email is not registered. Please create a new account.');
+      } else {
+        setForgotStatus('error');
+        setForgotFeedbackMessage(msg || 'Failed to send password reset email. Please try again.');
+      }
+    }
+  };
+
+  const handleGoToRegister = () => {
+    setIsForgotModalVisible(false);
+    router.push('/register');
   };
 
   return (
@@ -155,7 +224,12 @@ export default function LoginScreen() {
 
             {/* Password Field */}
             <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>PASSWORD</Text>
+              <View style={styles.labelWithLinkRow}>
+                <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>PASSWORD</Text>
+                <TouchableOpacity onPress={openForgotPasswordModal} activeOpacity={0.7}>
+                  <Text style={styles.forgotPassInlineLink}>Forgot Password?</Text>
+                </TouchableOpacity>
+              </View>
               <View
                 style={[
                   styles.inputWrapper,
@@ -221,7 +295,9 @@ export default function LoginScreen() {
               onPress={handleLogin}
               disabled={isLoading}
               activeOpacity={0.88}
+              accessibilityRole="button"
             >
+
               <LinearGradient
                 colors={['#00D589', '#00A86B']}
                 start={{ x: 0, y: 0 }}
@@ -248,6 +324,170 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
         </ScrollView>
+
+        {/* FORGOT PASSWORD MODAL */}
+        <Modal
+          visible={isForgotModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setIsForgotModalVisible(false)}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalOverlay}
+          >
+            <Pressable
+              style={styles.modalBackdrop}
+              onPress={() => setIsForgotModalVisible(false)}
+            />
+
+            <View
+              style={[
+                styles.modalCard,
+                {
+                  backgroundColor: themeColors.card,
+                  borderColor: themeColors.cardBorder,
+                },
+              ]}
+            >
+              {/* Modal Header */}
+              <View style={styles.modalHeaderRow}>
+                <View style={styles.modalIconWrap}>
+                  <Ionicons name="key-outline" size={22} color="#00C48C" />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={[styles.modalTitle, { color: themeColors.text }]}>Forgot Password</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setIsForgotModalVisible(false)}
+                  style={styles.closeModalBtn}
+                >
+                  <Ionicons name="close" size={20} color={themeColors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Status Feedbacks */}
+              {forgotStatus === 'error' && (
+                <View style={styles.errorBox}>
+                  <Ionicons name="alert-circle" size={18} color={themeColors.danger} />
+                  <Text style={styles.errorText}>{forgotFeedbackMessage}</Text>
+                </View>
+              )}
+
+              {/* NOT REGISTERED FEEDBACK */}
+              {forgotStatus === 'not_registered' && (
+                <View style={styles.notRegisteredBox}>
+                  <View style={styles.notRegisteredHeader}>
+                    <Ionicons name="person-add-outline" size={20} color="#F59E0B" />
+                    <Text style={styles.notRegisteredTitle}>Account Not Found</Text>
+                  </View>
+                  <Text style={styles.notRegisteredText}>
+                    {forgotFeedbackMessage || "We couldn't find an account registered with this email address."}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.registerNowBtn}
+                    onPress={handleGoToRegister}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="arrow-forward-circle" size={18} color="#FFFFFF" />
+                    <Text style={styles.registerNowBtnText}>Register New Account</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* SUCCESS FEEDBACK */}
+              {forgotStatus === 'success' ? (
+                <View style={styles.successBox}>
+                  <View style={styles.successIconCircle}>
+                    <Ionicons name="checkmark-circle" size={44} color="#00C48C" />
+                  </View>
+                  <Text style={[styles.successTitle, { color: themeColors.text }]}>
+                    Check Your Inbox!
+                  </Text>
+                  <Text style={[styles.successDesc, { color: themeColors.textSecondary }]}>
+                    A password reset link has been sent to{' '}
+                    <Text style={{ fontWeight: '700', color: themeColors.text }}>{forgotEmail}</Text>.
+                  </Text>
+                  <Text style={styles.successSubDesc}>
+                    Click the link in the email to set your new password.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.doneBtn}
+                    onPress={() => setIsForgotModalVisible(false)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.doneBtnText}>Back to Sign In</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <>
+                  <Text style={[styles.modalDesc, { color: themeColors.textSecondary }]}>
+                    Enter the email address associated with your account.
+                  </Text>
+
+                  {/* Email Input Field */}
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>YOUR REGISTERED EMAIL</Text>
+                    <View
+                      style={[
+                        styles.inputWrapper,
+                        {
+                          backgroundColor: themeColors.inputBg,
+                          borderColor: themeColors.inputBorder,
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name="mail-outline"
+                        size={19}
+                        color={themeColors.textSecondary}
+                        style={styles.inputIcon}
+                      />
+                      <TextInput
+                        style={[styles.input, { color: themeColors.text }]}
+                        value={forgotEmail}
+                        onChangeText={(txt) => {
+                          setForgotEmail(txt);
+                          if (forgotStatus !== 'idle') setForgotStatus('idle');
+                        }}
+                        autoCapitalize="none"
+                        keyboardType="email-address"
+                        autoFocus={true}
+                      />
+                    </View>
+                  </View>
+
+                  {/* Actions */}
+                  <TouchableOpacity
+                    style={styles.sendResetBtn}
+                    onPress={handleForgotPasswordSubmit}
+                    disabled={forgotLoading}
+                    activeOpacity={0.88}
+                  >
+                    <LinearGradient
+                      colors={['#00D589', '#00A86B']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.gradientBtn}
+                    >
+                      {forgotLoading ? (
+                        <>
+                          <ActivityIndicator color="#FFFFFF" size="small" />
+                          <Text style={styles.signInBtnText}>Verifying & Sending...</Text>
+                        </>
+                      ) : (
+                        <>
+                          <Ionicons name="paper-plane-outline" size={18} color="#FFFFFF" />
+                          <Text style={styles.signInBtnText}>Send Reset Link</Text>
+                        </>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -428,6 +668,160 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
     letterSpacing: 0.3,
+  },
+  labelWithLinkRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  forgotPassInlineLink: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#00C48C',
+  },
+  forgotPassLink: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#00C48C',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 440,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 24,
+    shadowColor: '#000000',
+    shadowOpacity: 0.25,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0, 196, 140, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 196, 140, 0.25)',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  modalSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  closeModalBtn: {
+    padding: 6,
+    borderRadius: 10,
+  },
+  modalDesc: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 18,
+  },
+  sendResetBtn: {
+    marginTop: 10,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  notRegisteredBox: {
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+  },
+  notRegisteredHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  notRegisteredTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#F59E0B',
+  },
+  notRegisteredText: {
+    fontSize: 13,
+    color: '#D97706',
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  registerNowBtn: {
+    backgroundColor: '#00C48C',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  registerNowBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  successBox: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+  },
+  successIconCircle: {
+    marginBottom: 12,
+  },
+  successTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  successDesc: {
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  successSubDesc: {
+    fontSize: 12,
+    color: '#94A3B8',
+    textAlign: 'center',
+    lineHeight: 17,
+    marginBottom: 20,
+  },
+  doneBtn: {
+    width: '100%',
+    backgroundColor: '#00C48C',
+    paddingVertical: 13,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  doneBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   footerRow: {
     flexDirection: 'row',

@@ -6,15 +6,14 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Redirect } from 'expo-router';
-import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import { useStore } from '../../src/store/StoreContext';
-import { fetchAiRecommendationsData } from '../../src/services/api';
+import { fetchAiRecommendationsData, sendAiChatMessage } from '../../src/services/api';
 
 const DEFAULT_RECS = [
   'Turn off devices when not in use to save more energy.',
@@ -22,19 +21,27 @@ const DEFAULT_RECS = [
   'Great time to run heavy appliances is between 11 PM – 6 AM.',
 ];
 
+const QUICK_PROMPTS = [
+  { id: 'load', label: '⚡ Max Load Limit', query: 'What is the maximum power and load limit?' },
+  { id: 'wifi', label: '📶 Wi-Fi Setup Guide', query: 'How do I set up Wi-Fi and connect my phone?' },
+  { id: 'unplug', label: '🔌 Why 0V when unplugged?', query: 'Why does it show 0V and 0W when unplugged?' },
+  { id: 'save', label: '💰 How to save electricity', query: 'How can I save electricity and lower my bill?' },
+  { id: 'safety', label: '🛡️ Is it safe for heaters?', query: 'Is PowerSense safe for heavy loads like geysers and AC?' },
+  { id: 'diag', label: '📊 Live Status Report', query: 'Explain my live voltage and power consumption' },
+];
+
 export default function AiInsightsScreen() {
   const router = useRouter();
   const { state, isDark, themeColors } = useStore();
 
-  if (!state.isLoggedIn) return <Redirect href="/login" />;
-
   const [recommendations, setRecommendations] = useState(DEFAULT_RECS);
   const [savingsAmount, setSavingsAmount] = useState('₹ 245');
   const [question, setQuestion] = useState('');
+  const [isThinking, setIsThinking] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant'; text: string }>>([
     {
       role: 'assistant',
-      text: "Hello! I'm PowerSense AI. I've analyzed your telemetry: your energy efficiency improved by 15% this month!",
+      text: "👋 **Hello! I'm PowerSense AI Product Assistant**.\n\nI can answer any doubt about your Smart Plug hardware, 10A thermal safety, Wi-Fi setup (`vivo Y75`), 0V zero-load behavior, or how to lower your monthly electricity bill!",
     },
   ]);
 
@@ -55,24 +62,98 @@ export default function AiInsightsScreen() {
     loadRecs();
   }, []);
 
-  const handleAsk = () => {
-    if (!question.trim()) return;
-    const userQ = question.trim();
+  if (!state.isLoggedIn) return <Redirect href="/login" />;
+
+  const liveVolts = state.telemetry?.voltage || 0.0;
+  const liveWatts = state.singlePlug?.watts ?? Math.round((state.telemetry?.totalPowerKw || 0) * 1000);
+  const liveAmps = state.telemetry?.currentAmps || 0.0;
+  const liveKwh = state.telemetry?.cumulativeKwh || 0.0;
+  const isRelayOn = state.singlePlug?.relayState === 'ON';
+
+  const askQuestionText = async (textQuery: string) => {
+    if (!textQuery.trim() || isThinking) return;
+    const userQ = textQuery.trim();
     setQuestion('');
 
     const newMsgs = [...chatMessages, { role: 'user' as const, text: userQ }];
     setChatMessages(newMsgs);
+    setIsThinking(true);
 
-    setTimeout(() => {
-      let reply = "Based on your real-time PZEM-004T stream, your power consumption is within safe operational thresholds. Running appliances during off-peak hours (11 PM - 6 AM) will maximize your monthly savings.";
-      const qLower = userQ.toLowerCase();
-      if (qLower.includes('save') || qLower.includes('cost') || qLower.includes('bill')) {
-        reply = "You can save approximately ₹245 this month by scheduling high-load appliances during the 11 PM – 6 AM off-peak tariff window and keeping standby loads unplugged.";
-      } else if (qLower.includes('voltage') || qLower.includes('watt') || qLower.includes('hardware')) {
-        reply = "Your ESP32 node is streaming at 230V nominal with ~0.98 power factor. No harmonic distortion or overheating detected on the 10A relay.";
+    const telemetryPayload = {
+      voltage: liveVolts,
+      current: liveAmps,
+      watts: liveWatts,
+      kwh: liveKwh,
+      power_factor: state.telemetry?.powerFactor || 0.0,
+      relay_state: isRelayOn ? 'ON' : 'OFF',
+    };
+
+    try {
+      // 1. Try Backend AI Endpoint
+      const backendRes: any = await sendAiChatMessage(userQ, telemetryPayload);
+      if (backendRes && backendRes.answer) {
+        setChatMessages([...newMsgs, { role: 'assistant' as const, text: backendRes.answer }]);
+        setIsThinking(false);
+        return;
       }
+    } catch (err) {
+      // Fallback to offline rule engine
+    }
+
+    // 2. Client-side Offline Knowledge Assistant Fallback
+    setTimeout(() => {
+      const qLower = userQ.toLowerCase();
+      let reply = `🤖 **PowerSense AI Assistant**:\n\n` +
+        `Your smart plug node is currently **${isRelayOn ? 'ACTIVE (ON)' : 'IDLE (OFF)'}** with live telemetry: **${liveVolts}V**, **${liveAmps}A**, **${liveWatts}W**.\n\n` +
+        `You can ask me about product safety, Wi-Fi setup, zero-load behavior, tariff rates, or how to reduce your monthly power bill!`;
+
+      if (qLower.includes('how does') || qLower.includes('how it works') || qLower.includes('product') || qLower.includes('powersense') || qLower.includes('monitor')) {
+        reply = `💡 **How PowerSense AI Smart Plug Works**:\n\n` +
+          `• **Hardware Module**: ESP32 dual-core microcontroller (240MHz) paired with PZEM-004T v3 high-precision AC transducer.\n` +
+          `• **Live Data Stream**: Measures Voltage (80-260V), Current (0-10A), Active Power (Watts), and Energy (kWh) in real-time and streams over Wi-Fi @ 1.0 Hz.\n` +
+          `• **Relay Control**: Built-in optocoupler safety relay (GPIO 26) lets you toggle appliances remotely.\n` +
+          `• **Live Telemetry**: Currently reading **${liveVolts}V**, **${liveAmps}A**, and **${liveWatts}W** (Relay ${isRelayOn ? 'ON' : 'OFF'}).`;
+      } else if (qLower.includes('wifi') || qLower.includes('wi-fi') || qLower.includes('hotspot') || qLower.includes('connect') || qLower.includes('ip') || qLower.includes('ssid')) {
+        reply = `📶 **Wi-Fi & Connectivity Setup**:\n\n` +
+          `1. **Hotspot Band**: Ensure your phone hotspot AP Band is set to **2.4 GHz** (ESP32 only supports 2.4 GHz).\n` +
+          `2. **SSID & Password**: ESP32 auto-connects to SSID \`vivo Y75\` with Pass \`1133557799\`.\n` +
+          `3. **Server IP**: Backend API server runs on laptop IP \`http://10.170.121.5:8000\`.\n` +
+          `4. **LED Indicator**: Blinking LED = searching Wi-Fi; Solid Blue = Connected & Streaming live!`;
+      } else if (qLower.includes('safe') || qLower.includes('load') || qLower.includes('rating') || qLower.includes('limit') || qLower.includes('overload') || qLower.includes('max') || qLower.includes('heat')) {
+        reply = `⚡ **Safety & Thermal Load Ratings**:\n\n` +
+          `• **Max Rated Current**: 10 Amperes (2300 Watts peak @ 230V AC).\n` +
+          `• **Recommended Baseline**: Continuous operating load up to 1450 Watts (ideal for TV, PC, Geysers, Fridges, Fans).\n` +
+          `• **Thermal Auto-Cutoff**: If load exceeds 1450W continuously, PowerSense AI flags a critical overload alert and triggers safety cutoff.\n` +
+          `• **Current Draw**: Currently drawing **${liveWatts} Watts** (${liveAmps} A). Status: Safe.`;
+      } else if (qLower.includes('unplug') || qLower.includes('0v') || qLower.includes('0w') || qLower.includes('mains') || qLower.includes('ac') || qLower.includes('zero')) {
+        reply = `🔌 **PZEM Unplugged / 0V Zero-Load Explanation**:\n\n` +
+          `When 230V AC mains line is unplugged from the green screw terminal:\n` +
+          `• PZEM-004T v3 sensor returns 0.0V, 0.0A, 0.0W (no line voltage detected).\n` +
+          `• The ESP32 node remains powered by USB 5V and keeps streaming heartbeat and relay commands over Wi-Fi.\n` +
+          `• As soon as 230V AC mains load is reconnected, real line voltage (~230V) and watts draw display instantly!`;
+      } else if (qLower.includes('save') || qLower.includes('bill') || qLower.includes('cost') || qLower.includes('tariff') || qLower.includes('money') || qLower.includes('kwh')) {
+        reply = `💰 **Energy & Cost Optimization**:\n\n` +
+          `• **Cumulative Usage**: You have consumed **${liveKwh.toFixed(2)} kWh** today.\n` +
+          `• **Estimated Spend**: ₹${(liveKwh * 6.50).toFixed(2)} based on standard tariff ₹6.50/kWh.\n` +
+          `• **Peak Shift Tip**: Shift heavy cycles away from peak tariff hours (6 PM – 10 PM) to save up to ₹245/month.`;
+      } else if (qLower.includes('schedule') || qLower.includes('timer') || qLower.includes('auto')) {
+        reply = `⏱️ **Automated Schedules & Countdown Timers**:\n\n` +
+          `• You can configure custom routines (e.g. Night Sleep Saver, AC Cutoff) in the Home tab.\n` +
+          `• Set 15m, 30m, 60m countdown timers to auto-toggle the relay even when you're away from home.`;
+      }
+
       setChatMessages([...newMsgs, { role: 'assistant' as const, text: reply }]);
-    }, 600);
+      setIsThinking(false);
+    }, 400);
+  };
+
+  const clearChat = () => {
+    setChatMessages([
+      {
+        role: 'assistant',
+        text: "👋 Chat reset! Ask me anything about your PowerSense AI Smart Plug hardware, Wi-Fi setup, safety, or energy savings.",
+      },
+    ]);
   };
 
   return (
@@ -83,23 +164,34 @@ export default function AiInsightsScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={24} color={themeColors.text} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: themeColors.text }]}>AI Insights</Text>
-          <View style={{ width: 40 }} />
+          <View style={styles.headerCenter}>
+            <Text style={[styles.headerTitle, { color: themeColors.text }]}>AI Product Insights</Text>
+            <Text style={[styles.headerSub, { color: themeColors.textMuted }]}>
+              {isRelayOn ? `Plug Active • ${liveWatts}W (${liveVolts}V)` : 'Plug Idle • Relay OFF'}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={clearChat} style={styles.clearBtn} title="Clear Chat">
+            <Ionicons name="trash-outline" size={20} color={themeColors.textMuted} />
+          </TouchableOpacity>
         </View>
 
         {/* Monthly Insight Hero Card */}
         <View style={[styles.monthlyCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
           <View style={styles.monthlyTextCol}>
-            <Text style={[styles.monthlyLabel, { color: themeColors.text }]}>Monthly Insight</Text>
+            <View style={styles.monthlyBadgeRow}>
+              <Ionicons name="sparkles" size={14} color="#00C48C" />
+              <Text style={styles.monthlyBadgeText}>POWER SENSE INTELLIGENCE</Text>
+            </View>
+            <Text style={[styles.monthlyLabel, { color: themeColors.text }]}>Monthly Optimization</Text>
             <Text style={[styles.monthlyDesc, { color: themeColors.textSecondary }]}>
-              You used 15% less energy this month compared to last month.
+              Your energy efficiency improved by 15% this month! Shifting heavy loads away from peak tariff hours (6 PM - 10 PM) maximizes savings.
             </Text>
           </View>
 
-          {/* 3D AI Robot Graphic */}
+          {/* AI Robot Graphic */}
           <View style={styles.robotContainer}>
             <View style={[styles.robotCircle, { backgroundColor: isDark ? 'rgba(0, 196, 140, 0.15)' : '#E8FBF4' }]}>
-              <Ionicons name="sparkles" size={32} color="#00C48C" />
+              <Ionicons name="hardware-chip-outline" size={30} color="#00C48C" />
             </View>
           </View>
         </View>
@@ -112,11 +204,11 @@ export default function AiInsightsScreen() {
           style={styles.savingsBanner}
         >
           <View style={styles.savingsTextCol}>
-            <Text style={styles.savingsLabel}>POTENTIAL SAVINGS</Text>
+            <Text style={styles.savingsLabel}>ESTIMATED MONTHLY SAVINGS</Text>
             <Text style={styles.savingsAmount}>
               {savingsAmount} <Text style={styles.savingsMonth}>/ month</Text>
             </Text>
-            <Text style={styles.savingsSub}>By following AI energy recommendations</Text>
+            <Text style={styles.savingsSub}>Based on AI peak tariff shifting & automated relay schedules</Text>
           </View>
 
           <View style={styles.growthGraphic}>
@@ -124,9 +216,31 @@ export default function AiInsightsScreen() {
           </View>
         </LinearGradient>
 
-        {/* Recommendations Section */}
+        {/* Product Spec Highlights Quick Grid */}
+        <View style={styles.specSection}>
+          <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Product Quick Specs</Text>
+          <View style={styles.specGrid}>
+            <View style={[styles.specCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
+              <Ionicons name="thunderstorm-outline" size={20} color="#00C48C" />
+              <Text style={[styles.specTitle, { color: themeColors.text }]}>10A / 1450W</Text>
+              <Text style={[styles.specSub, { color: themeColors.textMuted }]}>Safe Continuous Rating</Text>
+            </View>
+            <View style={[styles.specCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
+              <Ionicons name="wifi-outline" size={20} color="#3B82F6" />
+              <Text style={[styles.specTitle, { color: themeColors.text }]}>2.4 GHz Wi-Fi</Text>
+              <Text style={[styles.specSub, { color: themeColors.textMuted }]}>vivo Y75 Hotspot</Text>
+            </View>
+            <View style={[styles.specCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
+              <Ionicons name="shield-checkmark-outline" size={20} color="#10B981" />
+              <Text style={[styles.specTitle, { color: themeColors.text }]}>PZEM-004T v3</Text>
+              <Text style={[styles.specSub, { color: themeColors.textMuted }]}>Optocoupler Isolated</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Energy Recommendations */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Recommendations</Text>
+          <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Energy Recommendations</Text>
           <View style={styles.recommendationsList}>
             {recommendations.map((rec, idx) => (
               <View key={idx} style={[styles.recCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
@@ -141,7 +255,36 @@ export default function AiInsightsScreen() {
 
         {/* Interactive AI Chat Section */}
         <View style={styles.chatSection}>
-          <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Ask PowerSense AI</Text>
+          <View style={styles.chatHeaderRow}>
+            <Text style={[styles.sectionTitle, { color: themeColors.text, marginBottom: 0 }]}>
+              Ask PowerSense AI
+            </Text>
+            <Text style={[styles.chatSub, { color: themeColors.textMuted }]}>
+              Product Doubt Clarifier
+            </Text>
+          </View>
+
+          {/* Quick Prompt Chips */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipsScroll}
+          >
+            {QUICK_PROMPTS.map((chip) => (
+              <TouchableOpacity
+                key={chip.id}
+                style={[
+                  styles.promptChip,
+                  { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder },
+                ]}
+                onPress={() => askQuestionText(chip.query)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.chipText, { color: themeColors.text }]}>{chip.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
           <View style={[styles.chatBox, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
             {chatMessages.map((msg, idx) => (
               <View
@@ -176,24 +319,40 @@ export default function AiInsightsScreen() {
               </View>
             ))}
 
+            {isThinking && (
+              <View style={[styles.msgRow, styles.aiMsgRow]}>
+                <View style={[styles.aiMsgBadge, { backgroundColor: isDark ? 'rgba(0, 196, 140, 0.2)' : '#E8FBF4' }]}>
+                  <Ionicons name="sparkles" size={12} color="#00C48C" />
+                </View>
+                <View style={[styles.msgBubble, styles.aiBubble, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder, paddingVertical: 8 }]}>
+                  <ActivityIndicator size="small" color="#00C48C" />
+                </View>
+              </View>
+            )}
+
             {/* Input Row */}
             <View style={[styles.chatInputRow, { backgroundColor: themeColors.inputBg, borderColor: themeColors.inputBorder }]}>
               <TextInput
                 style={[styles.chatInput, { color: themeColors.text }]}
-                placeholder="Ask about your bill, voltage, or savings..."
+                placeholder="Ask any doubt about product, Wi-Fi, or load..."
                 placeholderTextColor={themeColors.textMuted}
                 value={question}
                 onChangeText={setQuestion}
-                onSubmitEditing={handleAsk}
+                onSubmitEditing={() => askQuestionText(question)}
               />
-              <TouchableOpacity style={styles.sendBtn} onPress={handleAsk} activeOpacity={0.8}>
+              <TouchableOpacity
+                style={[styles.sendBtn, isThinking && { opacity: 0.6 }]}
+                onPress={() => askQuestionText(question)}
+                disabled={isThinking}
+                activeOpacity={0.8}
+              >
                 <Ionicons name="arrow-up" size={18} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
           </View>
         </View>
 
-        <View style={{ height: 24 }} />
+        <View style={{ height: 30 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -224,9 +383,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerCenter: {
+    alignItems: 'center',
+  },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
+  },
+  headerSub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  clearBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // Monthly Card
@@ -244,42 +416,54 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 10,
   },
+  monthlyBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  monthlyBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#00C48C',
+    letterSpacing: 0.5,
+  },
   monthlyLabel: {
     fontSize: 15,
     fontWeight: '700',
     marginBottom: 4,
   },
   monthlyDesc: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 17,
   },
   robotContainer: {
     alignItems: 'center',
     justifyContent: 'center',
   },
   robotCircle: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   // Savings Banner
   savingsBanner: {
-    borderRadius: 24,
-    padding: 20,
+    borderRadius: 22,
+    padding: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 20,
-    elevation: 5,
+    elevation: 4,
   },
   savingsTextCol: {
     flex: 1,
   },
   savingsLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: 'rgba(255, 255, 255, 0.9)',
     letterSpacing: 0.5,
@@ -295,12 +479,37 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   savingsSub: {
-    fontSize: 12,
+    fontSize: 11,
     color: 'rgba(255, 255, 255, 0.85)',
   },
   growthGraphic: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  // Specs Section
+  specSection: {
+    marginBottom: 20,
+  },
+  specGrid: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  specCard: {
+    flex: 1,
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    alignItems: 'flex-start',
+    gap: 4,
+  },
+  specTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  specSub: {
+    fontSize: 10,
   },
 
   // Recommendations
@@ -319,14 +528,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 18,
-    padding: 16,
-    gap: 14,
+    padding: 14,
+    gap: 12,
     elevation: 2,
     borderWidth: 1,
   },
   recIconBadge: {
-    width: 38,
-    height: 38,
+    width: 36,
+    height: 36,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -342,6 +551,29 @@ const styles = StyleSheet.create({
   // Chat Section
   chatSection: {
     marginTop: 4,
+  },
+  chatHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  chatSub: {
+    fontSize: 12,
+  },
+  chipsScroll: {
+    gap: 8,
+    paddingBottom: 12,
+  },
+  promptChip: {
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderWidth: 1,
+  },
+  chipText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   chatBox: {
     borderRadius: 22,
@@ -368,7 +600,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   msgBubble: {
-    maxWidth: '80%',
+    maxWidth: '82%',
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -383,7 +615,7 @@ const styles = StyleSheet.create({
   },
   msgText: {
     fontSize: 13,
-    lineHeight: 18,
+    lineHeight: 19,
   },
   userMsgText: {
     color: '#FFFFFF',

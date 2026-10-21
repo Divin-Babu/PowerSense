@@ -26,10 +26,10 @@ class TelemetryStorageManager:
     # Device ID -> { 'last_persisted_ts': float, 'last_power_w': float, 'last_relay': str }
     _device_state: Dict[str, Dict[str, Any]] = {}
 
-    # Configuration thresholds
-    PERIODIC_PERSIST_INTERVAL_SECONDS = 30  # Persist at most once every 30 seconds for stable loads
-    SIGNIFICANT_DELTA_WATTS = 40.0         # Immediate write if load changes by >= 40W
-    SIGNIFICANT_DELTA_RATIO = 0.20         # Immediate write if load changes by >= 20%
+    # Configuration thresholds for low-power smart plug devices
+    PERIODIC_PERSIST_INTERVAL_SECONDS = 10  # Persist at most once every 10 seconds for steady baseline
+    SIGNIFICANT_DELTA_WATTS = 2.0          # Immediate write if load changes by >= 2.0W (sensitive to small bulbs/chargers)
+    SIGNIFICANT_DELTA_RATIO = 0.10         # Immediate write if load changes by >= 10%
     OVERLOAD_WATTS_THRESHOLD = 1450.0      # Critical safety threshold (10A smart plug rating)
     OVERVOLTAGE_THRESHOLD = 250.0          # Voltage surge limit
 

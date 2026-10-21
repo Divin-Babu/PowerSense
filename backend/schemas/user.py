@@ -45,7 +45,7 @@ class UserCreate(BaseModel):
         return v
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    email: str
     password: str
 
 class UserOut(BaseModel):
@@ -78,3 +78,33 @@ class UserProfileUpdate(BaseModel):
     phone: Optional[str] = None
     current_password: Optional[str] = None
     new_password: Optional[str] = None
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ForgotPasswordResponse(BaseModel):
+    success: bool
+    is_registered: bool
+    message: str
+    email: Optional[str] = None
+
+class VerifyResetTokenRequest(BaseModel):
+    token: str
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+    confirm_password: Optional[str] = None
+    email: Optional[EmailStr] = None
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        if len(v) < 6:
+            raise ValueError("New password must be at least 6 characters long.")
+        return v
+
+class ResetPasswordResponse(BaseModel):
+    success: bool
+    message: str
+    user: Optional[UserOut] = None

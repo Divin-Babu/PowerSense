@@ -14,6 +14,9 @@ export interface TelemetryData {
   wifiRssi: number;
   peakTariffActive: boolean;
   peakCountdown?: string;
+  relay1State?: 'ON' | 'OFF';
+  relay2State?: 'ON' | 'OFF';
+  powerSource?: string;
 }
 
 export interface SinglePlugLoadPreset {
@@ -30,6 +33,9 @@ export interface SinglePlugData {
   nodeId: string;
   name: string;
   relayState: 'ON' | 'OFF';
+  relay1State?: 'ON' | 'OFF';
+  relay2State?: 'ON' | 'OFF';
+  powerSource?: string;
   selectedLoadId: string;
   connectedLoadName: string;
   connectedLoadCategory: string;
@@ -84,6 +90,70 @@ export interface UserProfile {
   firmware: string;
 }
 
+export interface PlugSchedule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  onTime: string;  // "06:30" (24-hour format HH:MM)
+  offTime: string; // "23:00" (24-hour format HH:MM)
+  repeat: 'EVERYDAY' | 'WEEKDAYS' | 'WEEKENDS';
+  category?: string;
+}
+
+export interface TimerState {
+  active: boolean;
+  targetState: 'ON' | 'OFF';
+  totalSeconds: number;
+  secondsRemaining: number;
+  label: string;
+  startedAt?: number;
+}
+
+export interface ApplianceUsageHistory {
+  id: string;
+  name: string;
+  category: string;
+  emoji: string;
+  icon: string;
+  todayKwh: number;
+  yesterdayKwh: number;
+  thisWeekKwh: number;
+  thisMonthKwh: number;
+  baselineWatts: number;
+  efficiencyScore: string;
+  sparkline: number[];
+  estimatedCostMonth: number;
+}
+
+export interface PeakUsageData {
+  peakWindow: string;
+  averageKw: number;
+  peakKw: number;
+  isPeakNow?: boolean;
+  peakTariffRate?: string;
+  offPeakTariffRate?: string;
+  recommendation: string;
+}
+
+export interface EnergyGoalData {
+  targetKwh: number;
+  usedKwh: number;
+  remainingKwh: number;
+  progressPct: number;
+  daysLeftInMonth: number;
+  projectedKwh: number;
+  status: 'On Track' | 'Warning' | 'Exceeded';
+}
+
+export interface Achievement {
+  id: string;
+  badge: string;
+  title: string;
+  description: string;
+  unlockedAt: string;
+  isNew?: boolean;
+}
+
 export interface AppState {
   theme: 'light' | 'dark';
   isLoggedIn: boolean;
@@ -98,5 +168,32 @@ export interface AppState {
   isCopilotModalOpen?: boolean;
   isSimulatorModalOpen?: boolean;
   selectedKnowledgeItem?: KnowledgeItem | null;
+  schedules?: PlugSchedule[];
+  timer?: TimerState;
+  selectedApplianceHistoryId?: string;
+  applianceHistories?: ApplianceUsageHistory[];
+  peakUsage?: PeakUsageData;
+  energyGoal?: EnergyGoalData;
+  achievements?: Achievement[];
+}
+
+
+export interface ForgotPasswordResult {
+  success: boolean;
+  is_registered: boolean;
+  message: string;
+  email?: string;
+}
+
+export interface VerifyTokenResult {
+  valid: boolean;
+  email?: string;
+  name?: string;
+}
+
+export interface ResetPasswordResult {
+  success: boolean;
+  message: string;
+  user?: UserProfile;
 }
 

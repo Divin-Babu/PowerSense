@@ -1,6 +1,55 @@
 // PowerSense AI Backend API Service
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
-const API_BASE_URL = 'http://localhost:8000/api/auth';
+export function getBackendBaseUrl() {
+  if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+    const host = window.location.hostname;
+    if (host) {
+      return `http://${host}:8000`;
+    }
+  }
+
+  const hostUri =
+    Constants.expoConfig?.hostUri ||
+    Constants.manifest2?.extra?.expoGo?.debuggerHost ||
+    Constants.manifest?.debuggerHost;
+
+  if (hostUri) {
+    const ip = String(hostUri).split(':')[0];
+    if (ip) {
+      return `http://${ip}:8000`;
+    }
+  }
+
+  return 'http://10.170.121.5:8000';
+}
+
+export function getApiBaseUrl() { return `${getBackendBaseUrl()}/api/auth`; }
+export function getApiRoot() { return `${getBackendBaseUrl()}/api`; }
+export function getAdminBaseUrl() { return `${getBackendBaseUrl()}/api/admin`; }
+export function getDataBaseUrl() { return `${getBackendBaseUrl()}/api/data`; }
+
+export const API_BASE_URL = `${getBackendBaseUrl()}/api/auth`;
+export const ADMIN_BASE_URL = `${getBackendBaseUrl()}/api/admin`;
+export const DATA_BASE_URL = `${getBackendBaseUrl()}/api/data`;
+
+// Helper for fast non-blocking fetch with 1500ms timeout
+export async function fetchWithTimeout(url, options = {}, timeoutMs = 1500) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(id);
+    return response;
+  } catch (err) {
+    clearTimeout(id);
+    throw err;
+  }
+}
 
 export async function loginUser(email, password) {
   const controller = new AbortController();
@@ -20,7 +69,15 @@ export async function loginUser(email, password) {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.detail || data.message || 'Invalid email or password');
+      let errMsg = 'Invalid email/username or password.';
+      if (typeof data.detail === 'string') {
+        errMsg = data.detail;
+      } else if (Array.isArray(data.detail) && data.detail.length > 0) {
+        errMsg = data.detail[0]?.msg || 'Validation error.';
+      } else if (data.message) {
+        errMsg = data.message;
+      }
+      throw new Error(errMsg);
     }
 
     return {
@@ -32,18 +89,18 @@ export async function loginUser(email, password) {
   } catch (error) {
     clearTimeout(timeoutId);
 
-    // If backend is offline or timed out, allow seamless local fallback
+    // If network / server is offline (TypeError/AbortError), allow local fallback session
     const cleanEmail = (email || '').toLowerCase().trim();
     if (error.name === 'AbortError' || (error.message && error.message.includes('fetch')) || error.name === 'TypeError') {
       const role = cleanEmail.includes('admin') ? 'admin' : 'user';
       const rawUser = cleanEmail.split('@')[0];
-      const fallbackName = cleanEmail === 'divin@gmail.com' 
-        ? 'Divin Babu' 
+      const fallbackName = cleanEmail === 'divin@gmail.com' || cleanEmail === 'divin'
+        ? 'Divin Babu'
         : (rawUser.charAt(0).toUpperCase() + rawUser.slice(1));
       return {
         success: true,
         user: {
-          email: cleanEmail,
+          email: cleanEmail.includes('@') ? cleanEmail : `${cleanEmail}@powersense.com`,
           name: role === 'admin' ? 'System Administrator' : fallbackName,
           full_name: role === 'admin' ? 'System Administrator' : fallbackName,
           role: role,
@@ -68,7 +125,15 @@ export async function registerUser(name, email, password, phone) {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.detail || data.message || 'Registration failed');
+      let errMsg = 'Registration failed.';
+      if (typeof data.detail === 'string') {
+        errMsg = data.detail;
+      } else if (Array.isArray(data.detail) && data.detail.length > 0) {
+        errMsg = data.detail[0]?.msg || 'Validation error.';
+      } else if (data.message) {
+        errMsg = data.message;
+      }
+      throw new Error(errMsg);
     }
 
     return {
@@ -78,14 +143,23 @@ export async function registerUser(name, email, password, phone) {
       message: data.message || 'Account provisioned successfully',
     };
   } catch (error) {
-    if (error.name === 'TypeError' && error.message.includes('fetch')) {
-      throw new Error(
-        'Backend server offline. Please start FastAPI backend using uvicorn in backend directory.'
-      );
+    if (error.name === 'AbortError' || (error.message && error.message.includes('fetch')) || error.name === 'TypeError') {
+      return {
+        success: true,
+        user: {
+          email: email,
+          name: name,
+          full_name: name,
+          phone: phone,
+          role: 'user',
+        },
+        message: 'Account provisioned (Local session)',
+      };
     }
     throw error;
   }
 }
+
 
 export async function checkEmailAvailability(email) {
   try {
@@ -99,6 +173,105 @@ export async function checkEmailAvailability(email) {
   } catch (error) {
     // If backend is offline, return client check
     return { available: true, message: 'Email format is valid' };
+  }
+}
+
+export async function requestPasswordReset(email) {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+    throw new Error('Please enter a valid email address.');
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/forgot-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email: cleanEmail }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || data.message || 'Failed to process password reset request.');
+    }
+
+    return data; // { success: boolean, is_registered: boolean, message: string, email: string }
+  } catch (error) {
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Backend server is unreachable. Please ensure the API backend is running.');
+    }
+    throw error;
+  }
+}
+
+export async function verifyResetToken(token) {
+  if (!token) {
+    throw new Error('Reset token is required.');
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/verify-reset-token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ token }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || data.message || 'Invalid or expired password reset link.');
+    }
+
+    return data; // { valid: true, email: string, name: string }
+  } catch (error) {
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Backend server is unreachable. Please ensure the API backend is running.');
+    }
+    throw error;
+  }
+}
+
+export async function resetPassword(token, newPassword, confirmPassword, email) {
+  if (!token) {
+    throw new Error('Reset token is missing.');
+  }
+  if (!newPassword || newPassword.length < 6) {
+    throw new Error('New password must be at least 6 characters long.');
+  }
+  if (confirmPassword && newPassword !== confirmPassword) {
+    throw new Error('Passwords do not match. Please verify.');
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/reset-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        token,
+        new_password: newPassword,
+        confirm_password: confirmPassword || newPassword,
+        email: email || undefined,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || data.message || 'Failed to reset password.');
+    }
+
+    return data; // { success: true, message: string, user: UserOut }
+  } catch (error) {
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Backend server is unreachable. Please ensure the API backend is running.');
+    }
+    throw error;
   }
 }
 
@@ -150,11 +323,10 @@ export function validateEmailFormat(emailStr) {
 
 // ─── Live ESP32 Telemetry API Endpoints ─────────────────────────────────────
 
-const API_ROOT = 'http://localhost:8000/api';
-
 export async function fetchLiveTelemetry() {
   try {
-    const res = await fetch(`${API_ROOT}/telemetry/live`);
+    const apiRoot = getApiRoot();
+    const res = await fetch(`${apiRoot}/telemetry/live`);
     if (!res.ok) throw new Error('Failed to fetch live telemetry');
     const data = await res.json();
     return data.telemetry || {
@@ -184,12 +356,13 @@ export async function fetchLiveTelemetry() {
   }
 }
 
-export async function sendEsp32RelayCommand(deviceId, state) {
+export async function sendEsp32RelayCommand(deviceId, state, channel = 'CH1') {
   try {
-    const res = await fetch(`${API_ROOT}/esp32/relay`, {
+    const apiRoot = getApiRoot();
+    const res = await fetch(`${apiRoot}/esp32/relay`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ device_id: deviceId, state: state })
+      body: JSON.stringify({ device_id: deviceId, state: state, channel: channel })
     });
     return await res.json();
   } catch (e) {
@@ -199,7 +372,7 @@ export async function sendEsp32RelayCommand(deviceId, state) {
 
 // ─── Admin API Endpoints ──────────────────────────────────────────────────────
 
-const ADMIN_BASE_URL = 'http://localhost:8000/api/admin';
+function getAdminUrl() { return getAdminBaseUrl(); }
 
 export async function fetchAdminOverview() {
   try {
@@ -237,6 +410,51 @@ export async function fetchAdminUsers() {
       count: 0,
       users: []
     };
+  }
+}
+
+export async function createAdminUser(userData) {
+  try {
+    const res = await fetch(`${ADMIN_BASE_URL}/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(userData)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to create user');
+    return data;
+  } catch (e) {
+    throw new Error(e.message || 'Failed to create user');
+  }
+}
+
+export async function updateAdminUser(userId, userData) {
+  try {
+    const res = await fetch(`${ADMIN_BASE_URL}/users/${userId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(userData)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to update user profile');
+    return data;
+  } catch (e) {
+    throw new Error(e.message || 'Failed to update user profile');
+  }
+}
+
+export async function adminResetUserPassword(userId, newPassword) {
+  try {
+    const res = await fetch(`${ADMIN_BASE_URL}/users/${userId}/reset-password`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_password: newPassword })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to reset password');
+    return data;
+  } catch (e) {
+    throw new Error(e.message || 'Failed to reset password');
   }
 }
 
@@ -290,8 +508,53 @@ export async function fetchTariffs() {
   } catch (e) {
     return {
       success: true,
+      count: 1,
+      tariffs: [{ tariff_id: 1, id: 1, tariff_name: 'Domestic LT-1 Standard', rate_per_kwh: 6.50, effective_from: '2025-01-01' }],
       tariff: { standard_rate: 6.50, peak_rate: 9.80, off_peak_rate: 4.20, currency: 'INR', peak_start_hour: 18, peak_end_hour: 22 }
     };
+  }
+}
+
+export async function createTariff(tariffData) {
+  try {
+    const res = await fetch(`${ADMIN_BASE_URL}/tariffs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tariffData)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to create tariff plan');
+    return data;
+  } catch (e) {
+    throw new Error(e.message || 'Failed to create tariff plan');
+  }
+}
+
+export async function updateTariffById(tariffId, tariffData) {
+  try {
+    const res = await fetch(`${ADMIN_BASE_URL}/tariffs/${tariffId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tariffData)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to update tariff');
+    return data;
+  } catch (e) {
+    throw new Error(e.message || 'Failed to update tariff');
+  }
+}
+
+export async function deleteTariffById(tariffId) {
+  try {
+    const res = await fetch(`${ADMIN_BASE_URL}/tariffs/${tariffId}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to delete tariff');
+    return data;
+  } catch (e) {
+    throw new Error(e.message || 'Failed to delete tariff');
   }
 }
 
@@ -334,11 +597,11 @@ export async function fetchSystemHealth() {
 
 // ─── Direct Database Data Endpoints ──────────────────────────────────────────
 
-const DATA_BASE_URL = 'http://localhost:8000/api/data';
+function getDataUrl() { return getDataBaseUrl(); }
 
 export async function fetchDashboardData() {
   try {
-    const res = await fetch(`${DATA_BASE_URL}/dashboard`);
+    const res = await fetchWithTimeout(`${getDataUrl()}/dashboard`);
     if (!res.ok) throw new Error('Failed to fetch dashboard data');
     return await res.json();
   } catch (e) {
@@ -348,7 +611,7 @@ export async function fetchDashboardData() {
 
 export async function fetchAnalyticsData(period = 'day') {
   try {
-    const res = await fetch(`${DATA_BASE_URL}/analytics?period=${encodeURIComponent(period)}`);
+    const res = await fetchWithTimeout(`${getDataUrl()}/analytics?period=${encodeURIComponent(period)}`);
     if (!res.ok) throw new Error('Failed to fetch analytics data');
     return await res.json();
   } catch (e) {
@@ -358,7 +621,7 @@ export async function fetchAnalyticsData(period = 'day') {
 
 export async function fetchDevicesData() {
   try {
-    const res = await fetch(`${DATA_BASE_URL}/devices`);
+    const res = await fetchWithTimeout(`${getDataUrl()}/devices`);
     if (!res.ok) throw new Error('Failed to fetch devices');
     return await res.json();
   } catch (e) {
@@ -368,7 +631,7 @@ export async function fetchDevicesData() {
 
 export async function fetchAlertsData(category = 'all') {
   try {
-    const res = await fetch(`${DATA_BASE_URL}/alerts?category=${encodeURIComponent(category)}`);
+    const res = await fetchWithTimeout(`${getDataUrl()}/alerts?category=${encodeURIComponent(category)}`);
     if (!res.ok) throw new Error('Failed to fetch alerts');
     return await res.json();
   } catch (e) {
@@ -378,7 +641,7 @@ export async function fetchAlertsData(category = 'all') {
 
 export async function fetchAiRecommendationsData() {
   try {
-    const res = await fetch(`${DATA_BASE_URL}/recommendations`);
+    const res = await fetchWithTimeout(`${getDataUrl()}/recommendations`);
     if (!res.ok) throw new Error('Failed to fetch recommendations');
     return await res.json();
   } catch (e) {
@@ -388,7 +651,7 @@ export async function fetchAiRecommendationsData() {
 
 export async function fetchKnowledgeData() {
   try {
-    const res = await fetch(`${DATA_BASE_URL}/knowledge`);
+    const res = await fetchWithTimeout(`${getDataUrl()}/knowledge`);
     if (!res.ok) throw new Error('Failed to fetch knowledge');
     return await res.json();
   } catch (e) {
@@ -467,6 +730,35 @@ export async function fetchUserProfileApi(email) {
     return null;
   }
 }
+
+
+
+
+export async function fetchPeakUsageApi() {
+  try {
+    const res = await fetch(`${DATA_BASE_URL}/peak-usage`);
+    if (!res.ok) throw new Error('Failed to fetch peak usage stats');
+    return await res.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function sendAiChatMessage(question, telemetry = {}) {
+  try {
+    const res = await fetchWithTimeout(`${DATA_BASE_URL}/ai-chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, telemetry }),
+    }, 2500);
+    if (!res.ok) throw new Error('AI Chat endpoint returned non-OK status');
+    return await res.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+
 
 
 

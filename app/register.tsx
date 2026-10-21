@@ -419,7 +419,9 @@ export default function RegisterScreen() {
               onPress={handleRegister}
               disabled={isLoading}
               activeOpacity={0.88}
+              accessibilityRole="button"
             >
+
               <LinearGradient
                 colors={['#00D589', '#00A86B']}
                 start={{ x: 0, y: 0 }}

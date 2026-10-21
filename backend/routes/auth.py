@@ -15,9 +15,21 @@ from schemas.user import (
     AuthResponse,
     EmailCheckResponse,
     UserProfileUpdate,
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
+    VerifyResetTokenRequest,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
     clean_and_validate_indian_phone
 )
-from utils.auth import hash_password, verify_password, create_access_token
+from utils.auth import (
+    hash_password,
+    verify_password,
+    create_access_token,
+    create_password_reset_token,
+    verify_password_reset_token
+)
+from services.email_service import send_password_reset_email
 
 router = APIRouter()
 
@@ -106,20 +118,26 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=AuthResponse)
 def login(credentials: UserLogin, db: Session = Depends(get_db)):
-    clean_email = credentials.email.strip().lower()
+    clean_identifier = credentials.email.strip().lower()
 
-    # Query tbl_user table
-    user = db.query(User).filter(User.email == clean_email).first()
+    # Query tbl_user table by email, full_name, or email prefix (e.g. "admin" for "admin@powersense.com")
+    user = db.query(User).filter(
+        (User.email == clean_identifier) |
+        (User.email.startswith(clean_identifier + "@")) |
+        (User.full_name.ilike(clean_identifier))
+    ).first()
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password."
+            detail="Invalid email/username or password."
         )
 
-    if not verify_password(credentials.password, str(getattr(user, "password"))):
+    pwd_hash = getattr(user, "password_hash", None) or getattr(user, "password", "")
+    if not verify_password(credentials.password, str(pwd_hash)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password."
+            detail="Invalid email/username or password."
         )
 
     token = create_access_token(data={"sub": str(getattr(user, "email")), "user_id": getattr(user, "user_id", getattr(user, "id", None))})
@@ -182,11 +200,14 @@ def update_profile(req: UserProfileUpdate, db: Session = Depends(get_db)):
                 detail="Current password is required to set a new password."
             )
 
-        if not verify_password(req.current_password, str(getattr(user, "password"))):
+        current_pwd_hash = getattr(user, "password_hash", None) or getattr(user, "password", "")
+        if not verify_password(req.current_password, str(current_pwd_hash)):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Current password entered is incorrect."
             )
+
+        user.password_hash = hash_password(new_pwd)
 
         user.password_hash = hash_password(new_pwd)
 
@@ -224,3 +245,120 @@ def get_user_profile(email: str, db: Session = Depends(get_db)):
 @router.get("/me")
 def get_current_user_stub():
     return {"message": "PowerSense AI Authentication Service Active"}
+
+@router.post("/forgot-password", response_model=ForgotPasswordResponse)
+def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    clean_email = req.email.strip().lower()
+    
+    if not clean_email or "@" not in clean_email or "." not in clean_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please enter a valid email address."
+        )
+
+    # 1. Check if the user exists in tbl_user
+    user = db.query(User).filter(User.email == clean_email).first()
+    
+    # 2. If user does NOT exist -> Inform frontend that user is not registered
+    if not user:
+        return ForgotPasswordResponse(
+            success=False,
+            is_registered=False,
+            message="No account exists with this email address. Please register to create an account.",
+            email=clean_email
+        )
+
+    # 3. If user DOES exist -> Generate reset token and send email
+    try:
+        reset_token = create_password_reset_token(clean_email)
+        recipient_name = getattr(user, "full_name", None) or getattr(user, "name", None) or "PowerSense User"
+        
+        # Send email via Gmail SMTP
+        send_password_reset_email(
+            to_email=clean_email,
+            recipient_name=recipient_name,
+            reset_token=reset_token
+        )
+        
+        return ForgotPasswordResponse(
+            success=True,
+            is_registered=True,
+            message=f"Password reset link has been sent to {clean_email}. Please check your inbox.",
+            email=clean_email
+        )
+    except Exception as e:
+        print(f"[Forgot Password Error] Failed to send email: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to send reset email: {str(e)}"
+        )
+
+@router.post("/verify-reset-token")
+def verify_reset_token(req: VerifyResetTokenRequest, db: Session = Depends(get_db)):
+    payload = verify_password_reset_token(req.token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired password reset link. Please request a new one."
+        )
+
+    clean_email = payload.get("email") or payload.get("sub")
+    user = db.query(User).filter(User.email == clean_email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User account associated with this token was not found."
+        )
+
+    return {
+        "valid": True,
+        "email": clean_email,
+        "name": getattr(user, "full_name", None) or getattr(user, "name", "User")
+    }
+
+@router.post("/reset-password", response_model=ResetPasswordResponse)
+def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
+    # 1. Verify token
+    payload = verify_password_reset_token(req.token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token. Please request a new password reset link."
+        )
+
+    token_email = (payload.get("email") or payload.get("sub") or "").strip().lower()
+    
+    # 2. Check if confirm password matches if provided
+    if req.confirm_password and req.new_password != req.confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Passwords do not match. Please verify and re-enter."
+        )
+
+    # 3. Find user in database
+    user = db.query(User).filter(User.email == token_email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User account associated with this reset link was not found."
+        )
+
+    # 4. Hash new password and update tbl_user
+    new_hashed_pwd = hash_password(req.new_password)
+    user.password_hash = new_hashed_pwd
+
+    try:
+        db.commit()
+        db.refresh(user)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error while updating password: {str(e)}"
+        )
+
+    return ResetPasswordResponse(
+        success=True,
+        message="Your password has been reset successfully! You can now sign in with your new password.",
+        user=to_user_out(user)
+    )

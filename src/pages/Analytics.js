@@ -17,13 +17,20 @@ export function Analytics() {
           <p class="font-body-md text-on-surface-variant">PZEM-004T high-precision voltage, current, and active power telemetry logs.</p>
         </div>
 
-        <!-- Range Buttons -->
-        <div class="flex items-center gap-xs bg-surface-container-high p-xs rounded-xl border border-outline-variant">
-          ${['24h', '7d', '30d', '1y'].map(range => `
-            <button class="range-btn px-md py-xs rounded-lg font-label-sm text-label-sm ${activeRange === range ? 'bg-primary text-on-primary font-bold shadow' : 'text-on-surface-variant hover:text-on-surface'} transition-all" data-range="${range}">
-              ${range.toUpperCase()}
-            </button>
-          `).join('')}
+        <!-- Range & Action Buttons -->
+        <div class="flex flex-wrap items-center gap-sm">
+          <div class="flex items-center gap-xs bg-surface-container-high p-xs rounded-xl border border-outline-variant">
+            ${['24h', '7d', '30d', '1y'].map(range => `
+              <button class="range-btn px-md py-xs rounded-lg font-label-sm text-label-sm ${activeRange === range ? 'bg-primary text-on-primary font-bold shadow' : 'text-on-surface-variant hover:text-on-surface'} transition-all" data-range="${range}">
+                ${range.toUpperCase()}
+              </button>
+            `).join('')}
+          </div>
+
+          <button id="btn-export-pdf-report" class="flex items-center gap-xs px-md py-xs rounded-xl bg-primary text-space-void font-bold text-label-sm shadow hover:bg-primary-dark transition-all cursor-pointer">
+            <span class="material-symbols-outlined text-[18px]">picture_as_pdf</span>
+            <span>Generate PDF Report</span>
+          </button>
         </div>
       </section>
 
@@ -115,10 +122,10 @@ export function Analytics() {
         <h3 class="font-headline-md text-headline-md text-on-surface">Appliance Energy Distribution Share</h3>
         <div class="space-y-md">
           ${state.appliances.map(app => {
-            const total = state.appliances.reduce((a, b) => a + b.watts, 0) || 1;
-            const pct = Math.round((app.watts / total) * 100);
+    const total = state.appliances.reduce((a, b) => a + b.watts, 0) || 1;
+    const pct = Math.round((app.watts / total) * 100);
 
-            return `
+    return `
               <div class="space-y-xs">
                 <div class="flex justify-between font-body-md text-[14px]">
                   <span class="flex items-center gap-xs text-on-surface">
@@ -132,7 +139,7 @@ export function Analytics() {
                 </div>
               </div>
             `;
-          }).join('')}
+  }).join('')}
         </div>
       </section>
     </main>
