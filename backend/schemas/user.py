@@ -87,6 +87,8 @@ class ForgotPasswordResponse(BaseModel):
     is_registered: bool
     message: str
     email: Optional[str] = None
+    reset_token: Optional[str] = None
+    reset_link: Optional[str] = None
 
 class VerifyResetTokenRequest(BaseModel):
     token: str

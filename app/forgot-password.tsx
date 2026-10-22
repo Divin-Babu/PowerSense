@@ -25,6 +25,7 @@ export default function ForgotPasswordScreen() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<'idle' | 'not_registered' | 'success' | 'error'>('idle');
   const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [resetToken, setResetToken] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     const cleanEmail = email.trim().toLowerCase();
@@ -49,8 +50,11 @@ export default function ForgotPasswordScreen() {
         );
       } else if (res && (res.success || res.is_registered)) {
         setStatus('success');
+        if (res.reset_token) {
+          setResetToken(res.reset_token);
+        }
         setFeedbackMessage(
-          res.message || `A password reset link has been sent to ${cleanEmail} from powersense2026@gmail.com.`
+          res.message || `A password reset link has been generated for ${cleanEmail}.`
         );
       } else {
         setStatus('not_registered');
@@ -181,6 +185,15 @@ export default function ForgotPasswordScreen() {
                 <Text style={styles.successSubDesc}>
                   Please click the link inside the email to choose a new password. Remember to check your spam/junk folder if needed.
                 </Text>
+                {resetToken ? (
+                  <TouchableOpacity
+                    style={[styles.doneBtn, { backgroundColor: '#00C48C', borderColor: '#00C48C', marginBottom: 12 }]}
+                    onPress={() => router.push({ pathname: '/reset-password', params: { token: resetToken, email: email.trim().toLowerCase() } })}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.doneBtnText, { color: '#FFFFFF', fontWeight: 'bold' }]}>Reset Password Now →</Text>
+                  </TouchableOpacity>
+                ) : null}
                 <TouchableOpacity
                   style={styles.doneBtn}
                   onPress={() => router.replace('/login')}

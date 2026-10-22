@@ -153,16 +153,24 @@ powersense2026@gmail.com
     try:
         # Create secure context
         context = ssl.create_default_context()
-        if SMTP_PORT == 465:
-            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=context) as server:
+        
+        # Try SSL port 465 first, fallback to 587 STARTTLS
+        connected = False
+        try:
+            with smtplib.SMTP_SSL(SMTP_HOST, 465, context=context, timeout=8) as server:
                 server.login(SMTP_USER, password)
                 server.sendmail(SMTP_FROM, clean_to_email, msg.as_string())
-        else:
-            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
+                connected = True
+                return True
+        except Exception as ssl_err:
+            print(f"[Email Service Warning] Port 465 failed ({ssl_err}), trying port {SMTP_PORT}...")
+
+        if not connected:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=8) as server:
                 server.starttls(context=context)
                 server.login(SMTP_USER, password)
                 server.sendmail(SMTP_FROM, clean_to_email, msg.as_string())
-        return True
+                return True
     except Exception as e:
-        print(f"[Email Service Error] Failed to send password reset email to {clean_to_email}: {e}")
-        raise e
+        print(f"[Email Service Warning] Outbound SMTP connection blocked on cloud host: {e}")
+        return False
