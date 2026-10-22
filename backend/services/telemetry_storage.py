@@ -1,7 +1,12 @@
 import time
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from decimal import Decimal
 from typing import Dict, Any, Optional
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+def get_ist_now() -> datetime:
+    return datetime.now(timezone.utc).astimezone(IST)
 
 from sqlalchemy.orm import Session
 from database import SessionLocal
@@ -246,13 +251,14 @@ class TelemetryStorageManager:
                     energy=Decimal(str(max_energy)),
                     power_factor=Decimal(str(avg_pf)),
                     frequency=Decimal(str(avg_freq)),
-                    recorded_at=datetime.utcnow()
+                    recorded_at=get_ist_now().replace(tzinfo=None)
                 )
                 db.add(new_reading)
 
                 # Automated update to active user's DAY summary in tbl_usage_summary
-                today_start = datetime.combine(date.today(), datetime.min.time())
-                today_end = datetime.combine(date.today(), datetime.max.time())
+                now_ist = get_ist_now()
+                today_start = datetime.combine(now_ist.date(), datetime.min.time())
+                today_end = datetime.combine(now_ist.date(), datetime.max.time())
                 day_summary = db.query(UsageSummary).filter(
                     UsageSummary.user_id == active_uid,
                     UsageSummary.period_type == "DAY"
@@ -262,7 +268,7 @@ class TelemetryStorageManager:
                     day_summary.average_power = Decimal(str(avg_power))
                     if day_summary.peak_power is None or Decimal(str(avg_power)) > day_summary.peak_power:
                         day_summary.peak_power = Decimal(str(avg_power))
-                    day_summary.period_end = datetime.utcnow()
+                    day_summary.period_end = now_ist.replace(tzinfo=None)
                 else:
                     new_summary = UsageSummary(
                         user_id=active_uid,

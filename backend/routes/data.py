@@ -1,10 +1,17 @@
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
+
+# Standard Indian Standard Time (IST = UTC+5:30)
+IST = timezone(timedelta(hours=5, minutes=30))
+
+def get_ist_now() -> datetime:
+    """Return current timestamp normalized to Indian Standard Time (IST)."""
+    return datetime.now(timezone.utc).astimezone(IST)
 
 from database import get_db
 from models import (
@@ -80,17 +87,34 @@ def get_dashboard_summary(
         relay_state = "OFF"
         device_status = "STANDBY"
 
-    # 2. User-Specific Today Usage from tbl_usage_summary
-    day_summary = db.query(UsageSummary).filter(
-        UsageSummary.user_id == u_id,
-        UsageSummary.period_type == "DAY"
-    ).order_by(desc(UsageSummary.summary_id)).first()
+    # 2. User-Specific Today Usage from tbl_energy_reading or tbl_usage_summary
+    now_ist = get_ist_now()
+    today_start = datetime.combine(now_ist.date(), datetime.min.time())
+    today_end = datetime.combine(now_ist.date(), datetime.max.time())
 
-    if day_summary and day_summary.total_energy:
-        today_kwh = float(day_summary.total_energy)
+    # Query real readings logged today from database strictly for this user
+    today_db_readings = db.query(EnergyReading).filter(
+        EnergyReading.user_id == u_id,
+        EnergyReading.recorded_at >= today_start,
+        EnergyReading.recorded_at <= today_end
+    ).order_by(EnergyReading.recorded_at.asc()).all()
+
+    if today_db_readings:
+        valid_energies = [float(r.energy) for r in today_db_readings if r.energy is not None]
+        if valid_energies:
+            delta = max(valid_energies) - min(valid_energies)
+            today_kwh = round(max(delta, valid_energies[-1] if len(valid_energies) == 1 else delta), 3)
+        else:
+            today_kwh = 0.0
     else:
-        # Fallback based on user ID seed profile
-        today_kwh = round(1.20 + (u_id * 0.45) % 2.5, 3)
+        day_summary = db.query(UsageSummary).filter(
+            UsageSummary.user_id == u_id,
+            UsageSummary.period_type == "DAY"
+        ).order_by(desc(UsageSummary.summary_id)).first()
+        if day_summary and day_summary.total_energy:
+            today_kwh = float(day_summary.total_energy)
+        else:
+            today_kwh = 0.0
 
     # 3. User-Specific Monthly Goal & Bill Estimate
     user_goal_kwh = float(target_user.energy_goal_kwh) if target_user and target_user.energy_goal_kwh else 100.0
@@ -115,21 +139,29 @@ def get_dashboard_summary(
 
     goal_pct = round((user_month_kwh / user_goal_kwh) * 100, 1) if user_goal_kwh > 0 else 0.0
 
-    # 4. 24-Hour Hourly Bars Distribution Scaled to User's Today Usage
+    # 4. 24-Hour Hourly Bars Distribution from User's Actual Database Readings
     time_slots = ["00:00", "02:00", "04:00", "06:00", "08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00", "22:00", "24:00"]
-    # Profile weights for 24-hour diurnal load (morning peak 8-10, evening peak 18-22)
-    weights = [0.03, 0.02, 0.02, 0.04, 0.12, 0.15, 0.10, 0.08, 0.09, 0.13, 0.14, 0.06, 0.02]
-
-    current_h = (datetime.now().hour // 2) * 2
+    current_h = (now_ist.hour // 2) * 2
     current_slot = f"{current_h:02d}:00"
 
     hourly_bars = []
     for idx, t in enumerate(time_slots):
-        val = round(today_kwh * weights[idx] * 1.5, 3)
-        # If live watts is high right now, adjust current slot
-        if t == current_slot and live_watts > 0:
-            live_kwh_delta = round((live_watts / 1000.0) * 0.5, 3)
-            val = max(val, live_kwh_delta)
+        slot_h = int(t.split(":")[0])
+        # Only hours up to current hour can have energy; future slots are strictly 0.0
+        if slot_h > now_ist.hour:
+            val = 0.0
+        else:
+            w_start = today_start + timedelta(hours=slot_h)
+            w_end = w_start + timedelta(hours=2)
+            slot_records = [r for r in today_db_readings if w_start <= r.recorded_at < w_end]
+            if slot_records:
+                valid_p = [float(r.power or 0.0) for r in slot_records]
+                avg_w = sum(valid_p) / len(valid_p) if valid_p else 0.0
+                val = round((avg_w / 1000.0) * 2.0, 3)
+            elif t == current_slot and live_watts > 0:
+                val = max(0.005, round((live_watts / 1000.0) * 0.5, 3))
+            else:
+                val = 0.0
         hourly_bars.append({"time": t, "val": val})
 
     return {
@@ -198,9 +230,12 @@ def get_analytics_data(
     user_appliance = db.query(Appliance).filter(Appliance.user_id == u_id).first()
     load_name = user_appliance.appliance_name if user_appliance else dev_name
 
-    now = datetime.now()
+    now_ist = get_ist_now()
+    now = now_ist.replace(tzinfo=None)
+    today_date = now_ist.date()
+
     if period == "day":
-        target_day = date.today() - timedelta(days=offset)
+        target_day = today_date - timedelta(days=offset)
         if offset == 0:
             date_str = f"Today ({target_day.strftime('%d %b')})"
             period_start = datetime.combine(target_day, datetime.min.time())
@@ -227,8 +262,8 @@ def get_analytics_data(
             date_str = f"{week_start_dt.strftime('%d %b')} – {week_end_dt.strftime('%d %b')}"
 
     elif period == "month":
-        curr_year = date.today().year
-        curr_month = date.today().month
+        curr_year = today_date.year
+        curr_month = today_date.month
         tot_m = (curr_year * 12 + curr_month - 1) - offset
         t_year = tot_m // 12
         t_month = (tot_m % 12) + 1
@@ -239,24 +274,17 @@ def get_analytics_data(
         date_str = period_start.strftime("%B %Y")
 
     else:
-        t_year = date.today().year - offset
+        t_year = today_date.year - offset
         date_str = str(t_year)
         period_start = datetime(t_year, 1, 1, 0, 0, 0)
         period_end = datetime(t_year, 12, 31, 23, 59, 59)
 
-    # User-Isolated Energy Readings Query
+    # User-Isolated Energy Readings Query strictly for this user
     readings = db.query(EnergyReading).filter(
         EnergyReading.user_id == u_id,
         EnergyReading.recorded_at >= period_start,
         EnergyReading.recorded_at <= period_end
     ).order_by(EnergyReading.recorded_at.asc()).all()
-
-    if not readings and offset == 0:
-        readings = db.query(EnergyReading).filter(
-            (EnergyReading.user_id == u_id) | (EnergyReading.user_id == None),
-            EnergyReading.recorded_at >= period_start,
-            EnergyReading.recorded_at <= period_end
-        ).order_by(EnergyReading.recorded_at.asc()).all()
 
     if readings:
         valid_energies = [float(r.energy) for r in readings if r.energy is not None]
@@ -264,7 +292,7 @@ def get_analytics_data(
             min_e = min(valid_energies)
             max_e = max(valid_energies)
             delta = max_e - min_e
-            total_kwh = round(max(delta, max_e), 3) if max_e > 0 else 0.001
+            total_kwh = round(max(delta, max_e if len(valid_energies) == 1 else delta), 3)
         else:
             total_kwh = round(live_energy, 3) if (offset == 0 and live_energy > 0) else 0.0
     else:
@@ -291,8 +319,6 @@ def get_analytics_data(
         standby_pct = max(0, 100 - high_pct - norm_pct)
         if high_pct + norm_pct + standby_pct == 0:
             norm_pct = 100
-    elif offset == 0 and total_kwh > 0:
-        high_pct, norm_pct, standby_pct = 15, 80, 5
     else:
         high_pct, norm_pct, standby_pct = 0, 0, 0
 

@@ -13,15 +13,16 @@ import { useRouter, Redirect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Linking from 'expo-linking';
 import { useStore } from '../../src/store/StoreContext';
-import { fetchAnalyticsData } from '../../src/services/api';
+import { fetchAnalyticsData, getBackendBaseUrl } from '../../src/services/api';
 import { ApplianceUsageHistory, Achievement } from '../../src/types';
 
 type FilterType = 'day' | 'week' | 'month' | 'year';
 
 const DEFAULT_BREAKDOWN = [
-  { label: 'Active Draw', pct: 15, color: '#00C48C' },
-  { label: 'Normal Run', pct: 85, color: '#38BDF8' },
+  { label: 'Active Draw', pct: 0, color: '#00C48C' },
+  { label: 'Normal Run', pct: 0, color: '#38BDF8' },
   { label: 'Standby Idle', pct: 0, color: '#FBBF24' },
 ];
 
@@ -32,15 +33,15 @@ export default function AnalyticsScreen() {
   const [activeFilter, setActiveFilter] = useState<FilterType>('day');
   const initialKwh = state.telemetry?.cumulativeKwh !== undefined && state.telemetry?.cumulativeKwh > 0
     ? state.telemetry.cumulativeKwh.toFixed(3)
-    : '0.097';
+    : '0.000';
   const [totalKwh, setTotalKwh] = useState(initialKwh);
   const [breakdownData, setBreakdownData] = useState(DEFAULT_BREAKDOWN);
   const plugLabel = state.singlePlug?.connectedLoadName || 'PowerSense Smart Plug';
-  const liveKwhNum = state.telemetry?.cumulativeKwh || Number(totalKwh) || 0.097;
+  const liveKwhNum = state.telemetry?.cumulativeKwh || Number(totalKwh) || 0.0;
 
   const [topAppliances, setTopAppliances] = useState([
-    { id: 1, name: `${plugLabel} (Active High Load)`, icon: 'flash', iconColor: '#00C48C', pct: 15, kwh: `${(liveKwhNum * 0.15).toFixed(3)} kWh` },
-    { id: 2, name: `${plugLabel} (Normal Continuous Run)`, icon: 'speedometer-outline', iconColor: '#38BDF8', pct: 85, kwh: `${(liveKwhNum * 0.85).toFixed(3)} kWh` },
+    { id: 1, name: `${plugLabel} (Active High Load)`, icon: 'flash', iconColor: '#00C48C', pct: 0, kwh: '0.000 kWh' },
+    { id: 2, name: `${plugLabel} (Normal Continuous Run)`, icon: 'speedometer-outline', iconColor: '#38BDF8', pct: 0, kwh: '0.000 kWh' },
     { id: 3, name: `${plugLabel} (Standby / Idle Power)`, icon: 'moon-outline', iconColor: '#F59E0B', pct: 0, kwh: '0.000 kWh' },
   ]);
   const [dateDisplay, setDateDisplay] = useState(`Today (${new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short' })})`);
@@ -142,12 +143,20 @@ export default function AnalyticsScreen() {
               gap: 4,
               marginTop: 6,
             }}
-            onPress={() => {
-              const g = typeof globalThis !== 'undefined' ? (globalThis as any).window : null;
-              if (Platform.OS === 'web' && g) {
-                g.open(`http://localhost:8000/api/reports/usage/pdf?period=${activeFilter}&offset=${dateOffset}`, '_blank');
-              } else {
-                Alert.alert('PDF Export', `Exporting PowerSense PDF Report for ${activeFilter.toUpperCase()} period...`);
+            onPress={async () => {
+              const emailParam = state.user?.email ? `&email=${encodeURIComponent(state.user.email)}` : '';
+              const pdfUrl = `${getBackendBaseUrl()}/api/reports/usage/pdf?period=${activeFilter}&offset=${dateOffset}${emailParam}`;
+              try {
+                if (Platform.OS === 'web') {
+                  const g = typeof globalThis !== 'undefined' ? (globalThis as any).window : null;
+                  if (g) {
+                    g.open(pdfUrl, '_blank');
+                  }
+                } else {
+                  await Linking.openURL(pdfUrl);
+                }
+              } catch (err: any) {
+                Alert.alert('PDF Export', err?.message || 'Could not download PDF report.');
               }
             }}
             activeOpacity={0.8}

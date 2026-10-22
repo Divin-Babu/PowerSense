@@ -23,19 +23,19 @@ import { useStore } from '../../src/store/StoreContext';
 import { fetchDashboardData } from '../../src/services/api';
 
 const DEFAULT_HOURLY_BARS = [
-  { time: '00:00', val: 0.25 },
-  { time: '02:00', val: 0.15 },
-  { time: '04:00', val: 0.40 },
-  { time: '06:00', val: 0.20 },
-  { time: '08:00', val: 0.60 },
-  { time: '10:00', val: 0.85 },
-  { time: '12:00', val: 0.70 },
-  { time: '14:00', val: 1.30 },
-  { time: '16:00', val: 0.90 },
-  { time: '18:00', val: 0.50 },
-  { time: '20:00', val: 1.10 },
-  { time: '22:00', val: 0.65 },
-  { time: '24:00', val: 0.45 },
+  { time: '00:00', val: 0.0 },
+  { time: '02:00', val: 0.0 },
+  { time: '04:00', val: 0.0 },
+  { time: '06:00', val: 0.0 },
+  { time: '08:00', val: 0.0 },
+  { time: '10:00', val: 0.0 },
+  { time: '12:00', val: 0.0 },
+  { time: '14:00', val: 0.0 },
+  { time: '16:00', val: 0.0 },
+  { time: '18:00', val: 0.0 },
+  { time: '20:00', val: 0.0 },
+  { time: '22:00', val: 0.0 },
+  { time: '24:00', val: 0.0 },
 ];
 
 const TIMER_PRESETS = [15, 30, 45, 60, 120, 180];
@@ -547,9 +547,11 @@ export default function DashboardScreen() {
           {selectedBar !== null && hourlyBars[selectedBar] && (
             <View style={[styles.tooltipBox, { backgroundColor: isDark ? '#1F2937' : '#111827' }]}>
               <Text style={styles.tooltipText}>
-                {hourlyBars[selectedBar].val < 0.1
-                  ? `${(hourlyBars[selectedBar].val * 1000).toFixed(1)} Wh (${hourlyBars[selectedBar].val.toFixed(3)} kWh)`
-                  : `${hourlyBars[selectedBar].val.toFixed(2)} kWh`} • {hourlyBars[selectedBar].time}
+                {hourlyBars[selectedBar].val <= 0
+                  ? `0.0 Wh (0.000 kWh) • ${hourlyBars[selectedBar].time}`
+                  : hourlyBars[selectedBar].val < 0.1
+                  ? `${(hourlyBars[selectedBar].val * 1000).toFixed(1)} Wh (${hourlyBars[selectedBar].val.toFixed(3)} kWh) • ${hourlyBars[selectedBar].time}`
+                  : `${hourlyBars[selectedBar].val.toFixed(2)} kWh • ${hourlyBars[selectedBar].time}`}
               </Text>
             </View>
           )}
@@ -560,7 +562,8 @@ export default function DashboardScreen() {
               {(() => {
                 const maxVal = Math.max(0.005, ...hourlyBars.map((b) => b.val || 0));
                 return hourlyBars.map((item, idx) => {
-                  const heightPct = item.val > 0 ? Math.min(100, Math.max(12, (item.val / maxVal) * 100)) : 6;
+                  const hasVal = (item.val || 0) > 0;
+                  const heightPct = hasVal ? Math.min(100, Math.max(12, ((item.val || 0) / maxVal) * 100)) : 0;
                   const isSelected = selectedBar === idx;
 
                   return (
@@ -571,15 +574,29 @@ export default function DashboardScreen() {
                       activeOpacity={0.8}
                     >
                       <View style={[styles.barTrack, { backgroundColor: isDark ? '#1F2937' : '#E8F3ED' }]}>
-                        <View
-                          style={[
-                            styles.barFill,
-                            {
-                              height: `${heightPct}%`,
-                              backgroundColor: isSelected ? '#00C48C' : isDark ? '#105B44' : '#A7F3D0',
-                            },
-                          ]}
-                        />
+                        {hasVal ? (
+                          <View
+                            style={[
+                              styles.barFill,
+                              {
+                                height: `${heightPct}%`,
+                                backgroundColor: isSelected ? '#00C48C' : isDark ? '#105B44' : '#A7F3D0',
+                              },
+                            ]}
+                          />
+                        ) : isSelected ? (
+                          <View
+                            style={{
+                              position: 'absolute',
+                              bottom: 0,
+                              left: 0,
+                              right: 0,
+                              height: 3,
+                              borderRadius: 2,
+                              backgroundColor: '#00C48C',
+                            }}
+                          />
+                        ) : null}
                       </View>
                     </TouchableOpacity>
                   );
