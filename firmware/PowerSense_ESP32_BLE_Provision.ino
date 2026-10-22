@@ -52,7 +52,7 @@ const char* DIRECT_WIFI_PASS  = "1133557799";   // Set your Wi-Fi Password
 
 // Cloud Deployment Toggle: Set to true for Render cloud, false for local PC IP
 #define USE_CLOUD_HOST        true
-const char* RENDER_CLOUD_HOST = "powersense-backend.onrender.com"; // Replace with your actual Render URL domain
+const char* RENDER_CLOUD_HOST = "powersense-apoq.onrender.com"; // Replace with your actual Render URL domain
 const char* BACKEND_SERVER_IP = "10.170.121.5";                    // Local FastAPI IP
 const int   HTTP_PORT         = 8000;
 const int   MQTT_PORT         = 1883;

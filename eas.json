@@ -15,13 +15,17 @@
         "buildType": "apk"
       },
       "env": {
-        "EAS_SKIP_AUTO_FINGERPRINT": "1"
+        "EAS_SKIP_AUTO_FINGERPRINT": "1",
+        "EXPO_PUBLIC_API_URL": "https://powersense-apoq.onrender.com"
       }
     },
     "production": {
       "node": "20.18.0",
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://powersense-apoq.onrender.com"
       }
     }
   },

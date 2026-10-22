@@ -29,7 +29,7 @@ export function getBackendBaseUrl() {
     }
   }
 
-  return 'http://10.170.121.5:8000';
+  return 'https://powersense-apoq.onrender.com';
 }
 
 export function getApiBaseUrl() { return `${getBackendBaseUrl()}/api/auth`; }
@@ -41,8 +41,8 @@ export const API_BASE_URL = `${getBackendBaseUrl()}/api/auth`;
 export const ADMIN_BASE_URL = `${getBackendBaseUrl()}/api/admin`;
 export const DATA_BASE_URL = `${getBackendBaseUrl()}/api/data`;
 
-// Helper for fast non-blocking fetch with 1500ms timeout
-export async function fetchWithTimeout(url, options = {}, timeoutMs = 1500) {
+// Helper for fast non-blocking fetch with 8000ms timeout for cloud latency
+export async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -60,7 +60,8 @@ export async function fetchWithTimeout(url, options = {}, timeoutMs = 1500) {
 
 export async function loginUser(email, password) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 3500);
+  // Allow up to 20s in case Render free tier is waking from sleep
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
 
   try {
     const response = await fetch(`${API_BASE_URL}/login`, {
@@ -96,25 +97,13 @@ export async function loginUser(email, password) {
   } catch (error) {
     clearTimeout(timeoutId);
 
-    // If network / server is offline (TypeError/AbortError), allow local fallback session
-    const cleanEmail = (email || '').toLowerCase().trim();
-    if (error.name === 'AbortError' || (error.message && error.message.includes('fetch')) || error.name === 'TypeError') {
-      const role = cleanEmail.includes('admin') ? 'admin' : 'user';
-      const rawUser = cleanEmail.split('@')[0];
-      const fallbackName = cleanEmail === 'divin@gmail.com' || cleanEmail === 'divin'
-        ? 'Divin Babu'
-        : (rawUser.charAt(0).toUpperCase() + rawUser.slice(1));
-      return {
-        success: true,
-        user: {
-          email: cleanEmail.includes('@') ? cleanEmail : `${cleanEmail}@powersense.com`,
-          name: role === 'admin' ? 'System Administrator' : fallbackName,
-          full_name: role === 'admin' ? 'System Administrator' : fallbackName,
-          role: role,
-        },
-        message: 'Logged in (Local session)',
-      };
+    if (error.name === 'AbortError') {
+      throw new Error('Connection timed out. The cloud server may be waking up, please retry in a moment.');
     }
+    if ((error.message && error.message.includes('fetch')) || error.name === 'TypeError') {
+      throw new Error('Unable to connect to PowerSense cloud server (' + getBackendBaseUrl() + '). Please check your internet connection.');
+    }
+
     throw error;
   }
 }
