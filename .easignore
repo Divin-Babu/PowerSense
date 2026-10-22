@@ -1,0 +1,8 @@
+backend/
+firmware/
+testing/
+*.db
+*.sqlite
+*.log
+.git/
+.vscode/
