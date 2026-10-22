@@ -17,79 +17,37 @@ from models import (
 class TelemetryStorageManager:
     """
     Intelligent Multi-Tier Telemetry Processor:
-    - Tier 1: Real-time In-Memory cache for 1.0 Hz live app display & MQTT.
-    - Tier 2: Throttled persistence to PostgreSQL (Every 30-60s OR significant power surge/drop).
-    - Tier 3: Automated daily usage summary rollups in tbl_usage_summary.
+    - Tier 1: Real-time In-Memory cache for 1.0 Hz live app display.
+    - Tier 2: Persistent storage into PostgreSQL (Every 10s OR significant power surge/drop).
+    - Tier 3: Automated usage summary updates in tbl_usage_summary.
     - Tier 4: Long-term raw data retention pruning.
     """
 
-    # Device ID -> { 'last_persisted_ts': float, 'last_power_w': float, 'last_relay': str }
     _device_state: Dict[str, Dict[str, Any]] = {}
+    _reading_buffers: Dict[str, list] = {}
+    _last_aggregation_ts: Dict[str, float] = {}
+    _last_relay_state: Dict[str, str] = {}
 
-    # Configuration thresholds for low-power smart plug devices
-    PERIODIC_PERSIST_INTERVAL_SECONDS = 10  # Persist at most once every 10 seconds for steady baseline
-    SIGNIFICANT_DELTA_WATTS = 2.0          # Immediate write if load changes by >= 2.0W (sensitive to small bulbs/chargers)
-    SIGNIFICANT_DELTA_RATIO = 0.10         # Immediate write if load changes by >= 10%
+    AGGREGATION_INTERVAL_SECONDS = 60      # Store 1 clean averaged record every 60 seconds (1 minute window)
     OVERLOAD_WATTS_THRESHOLD = 1450.0      # Critical safety threshold (10A smart plug rating)
-    OVERVOLTAGE_THRESHOLD = 250.0          # Voltage surge limit
+    OVERVOLTAGE_THRESHOLD = 250.0          # Voltage surge limit (> 250V)
+    UNDERVOLTAGE_THRESHOLD = 205.0         # Brownout / low voltage limit (< 205V)
+    MIN_OPERATING_VOLTAGE = 50.0           # Below 50V is a power outage / unplugged
+
+    _last_undervoltage_alert: Dict[str, float] = {}
+    _last_overvoltage_alert: Dict[str, float] = {}
+    _active_user_id: Optional[int] = 2  # Default to primary active resident user
 
     @classmethod
-    def should_persist_to_db(cls, device_uid: str, power_w: float, relay_state: str) -> bool:
-        """
-        Determines whether 1-second telemetry should be saved into PostgreSQL tbl_energy_reading.
-        """
-        now = time.time()
-        prev = cls._device_state.get(device_uid)
-
-        if not prev:
-            # First reading from this device -> persist immediately
-            cls._device_state[device_uid] = {
-                "last_persisted_ts": now,
-                "last_power_w": power_w,
-                "last_relay": relay_state
-            }
-            return True
-
-        time_since_last = now - prev.get("last_persisted_ts", 0)
-        last_power = prev.get("last_power_w", 0.0)
-        last_relay = prev.get("last_relay", "OFF")
-
-        # Condition A: Relay state changed (e.g. turned ON or OFF)
-        if relay_state.upper() != last_relay.upper():
-            cls._update_device_state(device_uid, now, power_w, relay_state)
-            return True
-
-        # Condition B: Anomaly / Overload condition
-        if power_w >= cls.OVERLOAD_WATTS_THRESHOLD:
-            cls._update_device_state(device_uid, now, power_w, relay_state)
-            return True
-
-        # Condition C: Significant power surge or drop (|ΔW| >= 40W or 20%)
-        power_diff = abs(power_w - last_power)
-        if power_diff >= cls.SIGNIFICANT_DELTA_WATTS or (last_power > 0 and (power_diff / last_power) >= cls.SIGNIFICANT_DELTA_RATIO):
-            cls._update_device_state(device_uid, now, power_w, relay_state)
-            return True
-
-        # Condition D: Periodic 30-second interval elapsed for steady baseline
-        if time_since_last >= cls.PERIODIC_PERSIST_INTERVAL_SECONDS:
-            cls._update_device_state(device_uid, now, power_w, relay_state)
-            return True
-
-        return False
+    def set_active_user(cls, user_id: int):
+        cls._active_user_id = user_id
 
     @classmethod
-    def _update_device_state(cls, device_uid: str, ts: float, power_w: float, relay_state: str):
-        cls._device_state[device_uid] = {
-            "last_persisted_ts": ts,
-            "last_power_w": power_w,
-            "last_relay": relay_state
-        }
+    def get_active_user_id(cls) -> Optional[int]:
+        return cls._active_user_id
 
     @classmethod
     def process_and_persist(cls, payload: Dict[str, Any]):
-        """
-        Executes the intelligent storage pipeline for incoming ESP32/PZEM telemetry.
-        """
         device_uid = payload.get("device_id") or "ESP32-PZEM-PLUG-10A"
         power_w = float(payload.get("power", 0.0))
         voltage = float(payload.get("voltage", 230.0))
@@ -99,19 +57,31 @@ class TelemetryStorageManager:
         frequency = float(payload.get("frequency", 50.0))
         relay_state = str(payload.get("relay_state", "OFF")).upper()
 
-        # Check if this reading qualifies for database storage
-        if not cls.should_persist_to_db(device_uid, power_w, relay_state):
-            return {"persisted": False, "reason": "Throttled in-memory (1s fast buffer)"}
-
+        now_ts = time.time()
         db: Session = SessionLocal()
         try:
-            # 1. Resolve or create Device in PostgreSQL
+            # ─────────────────────────────────────────────────────────────────
+            # 1. ALWAYS UPDATE DEVICE LIVE ATTRIBUTES (Real-Time Live Telemetry)
+            # ─────────────────────────────────────────────────────────────────
             device = db.query(Device).filter(Device.device_uid == device_uid).first()
             if not device:
                 device = Device(
                     device_uid=device_uid,
-                    device_name=payload.get("name") or f"Plug {device_uid}",
+                    device_name=payload.get("name") or "PowerSense Smart Plug",
                     status="ONLINE",
+                    relay_state=relay_state,
+                    relay1_state=str(payload.get("relay1_state", "ON")).upper(),
+                    relay2_state=str(payload.get("relay2_state", "OFF")).upper(),
+                    voltage=Decimal(str(round(voltage, 2))),
+                    current=Decimal(str(round(current, 2))),
+                    power=Decimal(str(round(power_w, 2))),
+                    energy=Decimal(str(round(energy_kwh, 3))),
+                    frequency=Decimal(str(round(frequency, 2))),
+                    power_factor=Decimal(str(round(power_factor, 2))),
+                    power_source=payload.get("power_source") or "HLK-PM01 5V AC-DC",
+                    rssi=payload.get("rssi") or -60,
+                    ip_address=payload.get("ip_address") or "192.168.1.100",
+                    mac_address=payload.get("mac_address") or "24:6F:28:B4:9A:12",
                     last_seen=datetime.utcnow()
                 )
                 db.add(device)
@@ -120,42 +90,50 @@ class TelemetryStorageManager:
             else:
                 device.last_seen = datetime.utcnow()
                 device.status = "ONLINE"
+                device.relay_state = relay_state
+                if payload.get("relay1_state"):
+                    device.relay1_state = str(payload.get("relay1_state")).upper()
+                if payload.get("relay2_state"):
+                    device.relay2_state = str(payload.get("relay2_state")).upper()
+                device.voltage = Decimal(str(round(voltage, 2)))
+                device.current = Decimal(str(round(current, 2)))
+                device.power = Decimal(str(round(power_w, 2)))
+                device.energy = Decimal(str(round(energy_kwh, 3)))
+                device.frequency = Decimal(str(round(frequency, 2)))
+                device.power_factor = Decimal(str(round(power_factor, 2)))
+                if payload.get("rssi") is not None:
+                    device.rssi = int(payload.get("rssi"))
+                if payload.get("ip_address"):
+                    device.ip_address = str(payload.get("ip_address"))
+                if payload.get("mac_address"):
+                    device.mac_address = str(payload.get("mac_address"))
                 db.commit()
 
-            # 2. Resolve connected Appliance
-            appliance = db.query(Appliance).filter(Appliance.device_id == device.device_id).first()
+            # 2. Resolve connected Appliance (optional)
+            active_uid = cls.get_active_user_id() or device.user_id or 2
+            appliance = db.query(Appliance).filter(
+                (Appliance.device_id == device.device_id) & ((Appliance.user_id == active_uid) | (Appliance.user_id == None))
+            ).first()
             appliance_id = appliance.appliance_id if appliance else None
 
-            # 3. Store throttled snapshot in tbl_energy_reading
-            new_reading = EnergyReading(
-                device_id=device.device_id,
-                appliance_id=appliance_id,
-                voltage=Decimal(str(round(voltage, 2))),
-                current=Decimal(str(round(current, 2))),
-                power=Decimal(str(round(power_w, 2))),
-                energy=Decimal(str(round(energy_kwh, 3))),
-                power_factor=Decimal(str(round(power_factor, 2))),
-                frequency=Decimal(str(round(frequency, 2))),
-                recorded_at=datetime.utcnow()
-            )
-            db.add(new_reading)
-            db.commit()
-            db.refresh(new_reading)
-
-            # 4. Check for and record Anomalies if safety threshold exceeded
+            # ─────────────────────────────────────────────────────────────────
+            # 2. INSTANTANEOUS LIVE ANOMALY & SAFETY SENSING (Evaluated Every 1s)
+            # ─────────────────────────────────────────────────────────────────
+            # A. Overload Peak Sensing
             if power_w >= cls.OVERLOAD_WATTS_THRESHOLD:
                 anomaly = Anomaly(
+                    device_id=device.device_id,
+                    user_id=active_uid,
                     appliance_id=appliance_id,
-                    reading_id=new_reading.reading_id,
                     anomaly_type="High Power Usage",
                     severity="critical",
                     description=f"Power draw peaked at {power_w:.1f}W (> {cls.OVERLOAD_WATTS_THRESHOLD}W rating).",
                     detected_at=datetime.utcnow()
                 )
                 db.add(anomaly)
-
                 notif = Notification(
-                    user_id=device.user_id,
+                    user_id=active_uid,
+                    device_id=device.device_id,
                     appliance_id=appliance_id,
                     notification_type="critical",
                     message=f"High Power Usage: Load exceeded {power_w:.1f}W on {device.device_name}.",
@@ -165,11 +143,158 @@ class TelemetryStorageManager:
                 db.add(notif)
                 db.commit()
 
+            # B. Live Low Voltage Brownout Sensing (< 205V)
+            if cls.MIN_OPERATING_VOLTAGE < voltage < cls.UNDERVOLTAGE_THRESHOLD:
+                last_uv = cls._last_undervoltage_alert.get(device_uid, 0)
+                if now_ts - last_uv >= 300:  # 5-minute debounce
+                    cls._last_undervoltage_alert[device_uid] = now_ts
+                    anomaly = Anomaly(
+                        device_id=device.device_id,
+                        user_id=active_uid,
+                        appliance_id=appliance_id,
+                        anomaly_type="Low Voltage",
+                        severity="warning",
+                        description=f"Low mains voltage detected: {voltage:.1f}V (< {cls.UNDERVOLTAGE_THRESHOLD}V). Brownout conditions may damage compressor motors or power supplies.",
+                        detected_at=datetime.utcnow()
+                    )
+                    db.add(anomaly)
+                    notif = Notification(
+                        user_id=active_uid,
+                        device_id=device.device_id,
+                        appliance_id=appliance_id,
+                        notification_type="warning",
+                        message=f"Low Voltage Warning: Mains dropped to {voltage:.1f}V on {device.device_name}. Sensitive appliances may experience brownout stress.",
+                        status="UNREAD",
+                        created_at=datetime.utcnow()
+                    )
+                    db.add(notif)
+                    db.commit()
+
+            # C. Live Overvoltage Surge Sensing (>= 250V)
+            if voltage >= cls.OVERVOLTAGE_THRESHOLD:
+                last_ov = cls._last_overvoltage_alert.get(device_uid, 0)
+                if now_ts - last_ov >= 300:  # 5-minute debounce
+                    cls._last_overvoltage_alert[device_uid] = now_ts
+                    anomaly = Anomaly(
+                        device_id=device.device_id,
+                        user_id=active_uid,
+                        appliance_id=appliance_id,
+                        anomaly_type="High Voltage",
+                        severity="critical",
+                        description=f"Overvoltage surge detected: {voltage:.1f}V (>= {cls.OVERVOLTAGE_THRESHOLD}V). Risk of appliance component breakdown.",
+                        detected_at=datetime.utcnow()
+                    )
+                    db.add(anomaly)
+                    notif = Notification(
+                        user_id=active_uid,
+                        device_id=device.device_id,
+                        appliance_id=appliance_id,
+                        notification_type="critical",
+                        message=f"Overvoltage Alert: Voltage spiked to {voltage:.1f}V on {device.device_name}. Disconnect load immediately.",
+                        status="UNREAD",
+                        created_at=datetime.utcnow()
+                    )
+                    db.add(notif)
+                    db.commit()
+
+            # ─────────────────────────────────────────────────────────────────
+            # 3. TIME-WINDOW BUFFERING & PERIODIC AVERAGING FOR tbl_energy_reading
+            # ─────────────────────────────────────────────────────────────────
+            if device_uid not in cls._reading_buffers:
+                cls._reading_buffers[device_uid] = []
+                cls._last_aggregation_ts[device_uid] = now_ts
+                cls._last_relay_state[device_uid] = relay_state
+
+            cls._reading_buffers[device_uid].append({
+                "voltage": voltage,
+                "current": current,
+                "power": power_w,
+                "energy": energy_kwh,
+                "power_factor": power_factor,
+                "frequency": frequency,
+                "relay_state": relay_state
+            })
+
+            last_agg = cls._last_aggregation_ts.get(device_uid, now_ts)
+            buffer = cls._reading_buffers[device_uid]
+            relay_changed = (cls._last_relay_state.get(device_uid) != relay_state)
+            time_elapsed = now_ts - last_agg
+
+            # Only write to tbl_energy_reading when the averaging window elapses (60s) or relay state changes
+            if (time_elapsed >= cls.AGGREGATION_INTERVAL_SECONDS) or (relay_changed and len(buffer) >= 2):
+                cls._last_aggregation_ts[device_uid] = now_ts
+                cls._last_relay_state[device_uid] = relay_state
+
+                avg_voltage = round(sum(s["voltage"] for s in buffer) / len(buffer), 2)
+                avg_current = round(sum(s["current"] for s in buffer) / len(buffer), 2)
+                avg_power = round(sum(s["power"] for s in buffer) / len(buffer), 2)
+                avg_pf = round(sum(s["power_factor"] for s in buffer) / len(buffer), 2)
+                avg_freq = round(sum(s["frequency"] for s in buffer) / len(buffer), 2)
+                max_energy = round(max(s["energy"] for s in buffer), 3)
+                sample_count = len(buffer)
+
+                # Reset buffer for next averaging period
+                cls._reading_buffers[device_uid] = []
+
+                new_reading = EnergyReading(
+                    device_id=device.device_id,
+                    appliance_id=appliance_id,
+                    user_id=active_uid,
+                    voltage=Decimal(str(avg_voltage)),
+                    current=Decimal(str(avg_current)),
+                    power=Decimal(str(avg_power)),
+                    energy=Decimal(str(max_energy)),
+                    power_factor=Decimal(str(avg_pf)),
+                    frequency=Decimal(str(avg_freq)),
+                    recorded_at=datetime.utcnow()
+                )
+                db.add(new_reading)
+
+                # Automated update to active user's DAY summary in tbl_usage_summary
+                today_start = datetime.combine(date.today(), datetime.min.time())
+                today_end = datetime.combine(date.today(), datetime.max.time())
+                day_summary = db.query(UsageSummary).filter(
+                    UsageSummary.user_id == active_uid,
+                    UsageSummary.period_type == "DAY"
+                ).first()
+                if day_summary:
+                    day_summary.total_energy = Decimal(str(max_energy))
+                    day_summary.average_power = Decimal(str(avg_power))
+                    if day_summary.peak_power is None or Decimal(str(avg_power)) > day_summary.peak_power:
+                        day_summary.peak_power = Decimal(str(avg_power))
+                    day_summary.period_end = datetime.utcnow()
+                else:
+                    new_summary = UsageSummary(
+                        user_id=active_uid,
+                        device_id=device.device_id,
+                        period_type="DAY",
+                        period_start=today_start,
+                        period_end=today_end,
+                        total_energy=Decimal(str(max_energy)),
+                        average_power=Decimal(str(avg_power)),
+                        peak_power=Decimal(str(avg_power))
+                    )
+                    db.add(new_summary)
+
+                db.commit()
+                db.refresh(new_reading)
+
+                return {
+                    "persisted": True,
+                    "reading_id": new_reading.reading_id,
+                    "device_id": device.device_id,
+                    "aggregated_samples": sample_count,
+                    "window_seconds": int(time_elapsed),
+                    "avg_power_w": avg_power,
+                    "avg_voltage": avg_voltage,
+                    "recorded_at": new_reading.recorded_at.isoformat()
+                }
+
             return {
-                "persisted": True,
-                "reading_id": new_reading.reading_id,
-                "device_id": device.device_id,
-                "recorded_at": new_reading.recorded_at.isoformat()
+                "persisted": False,
+                "buffered_samples": len(buffer),
+                "seconds_until_next_snapshot": max(0, int(cls.AGGREGATION_INTERVAL_SECONDS - time_elapsed)),
+                "device_id": device.device_id
             }
 
         except Exception as e:
@@ -181,10 +306,6 @@ class TelemetryStorageManager:
 
     @classmethod
     def prune_old_readings(cls, retention_days: int = 30) -> int:
-        """
-        Deletes raw 30-second readings older than retention_days to prevent database bloat.
-        Daily summaries in tbl_usage_summary are preserved permanently.
-        """
         db: Session = SessionLocal()
         try:
             cutoff = datetime.utcnow() - timedelta(days=retention_days)

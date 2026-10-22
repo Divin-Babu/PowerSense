@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, BigInteger, String, DateTime
+from sqlalchemy import Column, BigInteger, String, DateTime, Numeric
 from database import Base
 
 class User(Base):
@@ -11,6 +11,7 @@ class User(Base):
     phone = Column(String(50), nullable=True)
     password_hash = Column(String(255), nullable=False)
     role = Column(String(50), default="user", nullable=True)
+    energy_goal_kwh = Column(Numeric(10, 2), default=100.0, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=True)
 
     # Property alias for compatibility
@@ -33,6 +34,7 @@ class User(Base):
     def to_dict(self):
         created_val = getattr(self, "created_at", None)
         disp_name = self.full_name or "User"
+        goal = float(self.energy_goal_kwh) if self.energy_goal_kwh is not None else 100.0
         return {
             "id": self.user_id,
             "user_id": self.user_id,
@@ -41,5 +43,6 @@ class User(Base):
             "email": self.email,
             "phone": self.phone,
             "role": self.role or "user",
+            "energy_goal_kwh": goal,
             "created_at": created_val.isoformat() if isinstance(created_val, datetime) else None
         }

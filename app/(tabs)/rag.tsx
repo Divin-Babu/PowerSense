@@ -170,7 +170,7 @@ export default function AiInsightsScreen() {
               {isRelayOn ? `Plug Active • ${liveWatts}W (${liveVolts}V)` : 'Plug Idle • Relay OFF'}
             </Text>
           </View>
-          <TouchableOpacity onPress={clearChat} style={styles.clearBtn} title="Clear Chat">
+          <TouchableOpacity onPress={clearChat} style={styles.clearBtn} accessibilityLabel="Clear Chat">
             <Ionicons name="trash-outline" size={20} color={themeColors.textMuted} />
           </TouchableOpacity>
         </View>

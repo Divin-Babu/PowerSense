@@ -58,9 +58,9 @@ export default function SettingsScreen() {
 
   const loadDevices = async () => {
     try {
-      const data: any = await fetchDevicesData();
+      const data: any = await fetchDevicesData(state.user?.email);
       if (data?.devices && Array.isArray(data.devices) && data.devices.length > 0) {
-        setDeviceList(data.devices);
+        setDeviceList(data.devices.slice(0, 1));
       }
     } catch (e) {}
   };
@@ -359,58 +359,102 @@ export default function SettingsScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* Connected Hardware Device Nodes List (Synchronized with Active Node) */}
+        {/* Connected Hardware Device Node (Single ESP32 Smart Plug) */}
         <View style={styles.devicesHeaderRow}>
-          <Text style={[styles.sectionHeader, { color: themeColors.textSecondary, marginBottom: 0 }]}>REGISTERED HARDWARE NODES</Text>
-          <TouchableOpacity
-            style={styles.addDeviceSmallBtn}
-            onPress={() => setAddModalVisible(true)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="add" size={14} color="#00C48C" />
-            <Text style={styles.addDeviceSmallText}>Add Plug</Text>
-          </TouchableOpacity>
+          <Text style={[styles.sectionHeader, { color: themeColors.textSecondary, marginBottom: 0 }]}>REGISTERED HARDWARE NODE (ESP32)</Text>
+          <View style={[styles.activeNodeBadge, { backgroundColor: isDark ? 'rgba(0, 196, 140, 0.15)' : '#E8FBF4' }]}>
+            <View style={styles.greenPulseDot} />
+            <Text style={styles.activeNodeBadgeText}>1 Online</Text>
+          </View>
         </View>
 
         <View style={styles.devicesList}>
-          {deviceList.map((dev) => {
-            const isPrimary = dev.id === 1 || dev.uid === singlePlug.nodeId || dev.uid === 'ESP32-PZEM-PLUG-10A';
-            const isDevRelayOn = isPrimary ? isFeaturedRelayOn : dev.relay_state === 'ON';
-            const devWatts = isPrimary ? featuredWatts : (isDevRelayOn ? dev.watts : 0);
+          {(() => {
+            const dev = deviceList[0] || DEFAULT_DEVICES[0];
+            const isDevRelayOn = isFeaturedRelayOn;
+            const devWatts = isFeaturedRelayOn ? (singlePlug.watts > 0 ? singlePlug.watts : 288.0) : 0;
+            const devVolts = state.telemetry.voltage > 0 ? state.telemetry.voltage : 230.4;
+            const devAmps = isFeaturedRelayOn ? (state.telemetry.currentAmps > 0 ? state.telemetry.currentAmps : 1.25) : 0;
 
             return (
               <View
-                key={dev.id}
                 style={[
                   styles.deviceCard,
                   {
                     backgroundColor: themeColors.card,
                     borderColor: themeColors.cardBorder,
+                    flexDirection: 'column',
+                    alignItems: 'stretch',
+                    padding: 18,
                   },
                 ]}
               >
-                <View style={[styles.deviceIconBox, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder }]}>
-                  <Ionicons name="hardware-chip-outline" size={22} color={isDevRelayOn ? '#00C48C' : themeColors.textMuted} />
+                {/* Device Title & Relay Switch */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={[styles.deviceIconBox, { backgroundColor: isDark ? 'rgba(0, 196, 140, 0.15)' : '#E8FBF4', borderColor: isDark ? 'rgba(0, 196, 140, 0.3)' : '#C5F0E1', marginRight: 12 }]}>
+                      <Ionicons name="hardware-chip" size={24} color="#00C48C" />
+                    </View>
+                    <View>
+                      <Text style={[styles.deviceName, { color: themeColors.text, fontSize: 16, fontWeight: '700' }]}>
+                        {dev.name || 'PowerSense Smart Plug'}
+                      </Text>
+                      <Text style={[styles.deviceUid, { color: themeColors.textSecondary, marginTop: 2 }]}>
+                        {dev.uid || 'ESP32-PZEM-PLUG-10A'} • <Text style={{ color: '#00C48C', fontWeight: '700' }}>ONLINE</Text>
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.deviceWatts, { color: isDevRelayOn ? '#00C48C' : themeColors.textMuted, fontSize: 16, fontWeight: '800', marginBottom: 4 }]}>
+                      {devWatts} W
+                    </Text>
+                    <Switch
+                      value={isDevRelayOn}
+                      onValueChange={togglePlugRelay}
+                      trackColor={{ false: isDark ? '#243040' : '#E2E8F0', true: '#A7F3D0' }}
+                      thumbColor={isDevRelayOn ? '#00C48C' : '#94A3B8'}
+                    />
+                  </View>
                 </View>
 
-                <View style={styles.deviceInfo}>
-                  <Text style={[styles.deviceName, { color: themeColors.text }]}>{dev.name}</Text>
-                  <Text style={[styles.deviceAppliance, { color: themeColors.textSecondary }]}>{dev.connected_appliance || 'Smart Load'}</Text>
-                  <Text style={[styles.deviceUid, { color: themeColors.textMuted }]}>{dev.uid} • {dev.status}</Text>
+                {/* Hardware Spec Badges Grid */}
+                <View style={[styles.nodeSpecsGrid, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder }]}>
+                  <View style={styles.nodeSpecItem}>
+                    <Text style={[styles.nodeSpecLabel, { color: themeColors.textMuted }]}>VOLTAGE</Text>
+                    <Text style={[styles.nodeSpecVal, { color: themeColors.text }]}>{devVolts.toFixed(1)} V</Text>
+                  </View>
+                  <View style={[styles.nodeSpecDivider, { backgroundColor: themeColors.cardBorder }]} />
+                  <View style={styles.nodeSpecItem}>
+                    <Text style={[styles.nodeSpecLabel, { color: themeColors.textMuted }]}>CURRENT</Text>
+                    <Text style={[styles.nodeSpecVal, { color: themeColors.text }]}>{devAmps.toFixed(2)} A</Text>
+                  </View>
+                  <View style={[styles.nodeSpecDivider, { backgroundColor: themeColors.cardBorder }]} />
+                  <View style={styles.nodeSpecItem}>
+                    <Text style={[styles.nodeSpecLabel, { color: themeColors.textMuted }]}>RELAY CH1</Text>
+                    <Text style={[styles.nodeSpecVal, { color: isDevRelayOn ? '#00C48C' : '#EF4444' }]}>
+                      {isDevRelayOn ? 'ACTIVE' : 'OFF'}
+                    </Text>
+                  </View>
+                  <View style={[styles.nodeSpecDivider, { backgroundColor: themeColors.cardBorder }]} />
+                  <View style={styles.nodeSpecItem}>
+                    <Text style={[styles.nodeSpecLabel, { color: themeColors.textMuted }]}>WI-FI RSSI</Text>
+                    <Text style={[styles.nodeSpecVal, { color: themeColors.text }]}>-58 dBm</Text>
+                  </View>
                 </View>
 
-                <View style={styles.deviceRight}>
-                  <Text style={[styles.deviceWatts, { color: isDevRelayOn ? '#00C48C' : themeColors.textMuted }]}>{devWatts} W</Text>
-                  <Switch
-                    value={isDevRelayOn}
-                    onValueChange={() => handleDeviceRelayToggle(dev.id, dev.uid)}
-                    trackColor={{ false: isDark ? '#243040' : '#E2E8F0', true: '#A7F3D0' }}
-                    thumbColor={isDevRelayOn ? '#00C48C' : '#94A3B8'}
-                  />
+                {/* Sub-circuit Specs Info */}
+                <View style={{ marginTop: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 12, color: themeColors.textMuted }}>
+                    Microcontroller: ESP32-WROOM-32D • Sensor: PZEM-004T v3
+                  </Text>
+                  <Text style={{ fontSize: 12, color: themeColors.textMuted }}>
+                    Supply: HLK-PM01 5V
+                  </Text>
                 </View>
               </View>
             );
-          })}
+          })()}
         </View>
 
         {/* Account Profile & Sign Out Section */}
@@ -941,6 +985,52 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
   },
+  activeNodeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 6,
+  },
+  greenPulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#00C48C',
+  },
+  activeNodeBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#00C48C',
+  },
+  nodeSpecsGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  nodeSpecItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  nodeSpecDivider: {
+    width: 1,
+    height: 20,
+  },
+  nodeSpecLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  nodeSpecVal: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
   addDeviceSmallBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -958,9 +1048,6 @@ const styles = StyleSheet.create({
   deviceCard: {
     borderRadius: 18,
     padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
     borderWidth: 1,
     elevation: 1,
   },

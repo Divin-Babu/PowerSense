@@ -186,65 +186,36 @@ def prune_telemetry(days: int = 30):
 @router.get("/telemetry/live")
 def get_live_telemetry():
     """
-    Get latest telemetry. If ESP32 has sent data within 15s, returns in-memory telemetry.
-    Otherwise, checks PostgreSQL for recent sensor readings within the last 60s.
+    Get latest telemetry.
+    Returns real live hardware stream ONLY if an ESP32 has sent data within the last 10 seconds.
+    Otherwise returns STANDBY with all measurements set to 0.0 and relay OFF.
     """
     now = time.time()
     last_ts = LATEST_TELEMETRY.get("last_seen_timestamp", 0)
 
-    if last_ts > 0 and (now - last_ts) < 15:
-        # Live and receiving in-memory
+    if last_ts > 0 and (now - last_ts) < 10:
+        # Live ESP32 stream active
         seconds_ago = int(now - last_ts)
         LATEST_TELEMETRY["connected"] = True
         LATEST_TELEMETRY["status"] = "ONLINE"
         LATEST_TELEMETRY["last_seen"] = f"{seconds_ago}s ago" if seconds_ago > 0 else "Just now"
     else:
-        # Check PostgreSQL database for recent device heartbeat (< 15s)
-        try:
-            from database import SessionLocal
-            from models import EnergyReading, Device
-            db = SessionLocal()
-            dev = db.query(Device).filter(Device.device_uid == "ESP32-PZEM-PLUG-10A").first()
-            if dev and dev.last_seen:
-                rec_ts = time.time() - (datetime.utcnow() - dev.last_seen).total_seconds()
-                diff = (datetime.utcnow() - dev.last_seen).total_seconds()
-                if diff < 15: # Heartbeat received within 15 seconds
-                    latest_reading = db.query(EnergyReading).filter(EnergyReading.device_id == dev.device_id).order_by(EnergyReading.recorded_at.desc()).first()
-                    is_recent = latest_reading and latest_reading.recorded_at and (datetime.utcnow() - latest_reading.recorded_at).total_seconds() < 60
-                    v = float(latest_reading.voltage) if is_recent else 0.0
-                    i = float(latest_reading.current) if is_recent else 0.0
-                    w = float(latest_reading.power) if is_recent else 0.0
-                    kwh = float(latest_reading.energy) if is_recent else 0.0
-                    pf = float(latest_reading.power_factor) if is_recent else 0.0
-                    freq = float(latest_reading.frequency) if is_recent else 0.0
-                    p_kw = round(w / 1000.0, 4)
-                    
-                    LATEST_TELEMETRY.update({
-                        "connected": True,
-                        "status": "ONLINE",
-                        "message": "Receiving live telemetry stream",
-                        "voltage": v,
-                        "current": i,
-                        "power_kw": p_kw,
-                        "power_watts": w,
-                        "energy_kwh": kwh,
-                        "frequency": freq,
-                        "power_factor": pf,
-                        "cost_today": round(kwh * 6.50, 2),
-                        "relay_state": "ON",
-                        "relay1_state": "ON",
-                        "device_id": dev.device_uid,
-                        "device_name": dev.device_name,
-                        "last_seen": f"{int(diff)}s ago" if int(diff) > 0 else "Just now",
-                        "last_seen_timestamp": rec_ts
-                    })
-                else:
-                    LATEST_TELEMETRY["connected"] = False
-                    LATEST_TELEMETRY["status"] = "STANDBY"
-                    LATEST_TELEMETRY["message"] = "Awaiting ESP32 hardware telemetry..."
-            db.close()
-        except Exception as e:
-            print("[Live Telemetry DB Hydration Error]", e)
+        # ESP32 is disconnected, powered off, or not transmitting
+        LATEST_TELEMETRY.update({
+            "connected": False,
+            "status": "STANDBY",
+            "message": "Awaiting ESP32 hardware telemetry stream...",
+            "voltage": 0.0,
+            "current": 0.0,
+            "power_kw": 0.0,
+            "power_watts": 0.0,
+            "power_factor": 0.0,
+            "frequency": 0.0,
+            "relay_state": "OFF",
+            "relay1_state": "OFF",
+            "relay2_state": "OFF",
+            "last_seen": "Offline / Standby"
+        })
 
     return {
         "success": True,
@@ -312,6 +283,36 @@ def toggle_esp32_relay(cmd: RelayCommand):
         CONNECTED_DEVICES[cmd.device_id]["relay1_state"] = r1
         CONNECTED_DEVICES[cmd.device_id]["relay2_state"] = r2
         CONNECTED_DEVICES[cmd.device_id]["relay_state"] = agg_state
+
+    # Save real notification & update tbl_device in PostgreSQL
+    try:
+        from database import SessionLocal
+        from models import Notification, Device, Appliance
+        db_s = SessionLocal()
+        dev = db_s.query(Device).filter(Device.device_uid == cmd.device_id).first()
+        if not dev:
+            dev = db_s.query(Device).first()
+        if dev:
+            dev.relay_state = agg_state
+            dev.relay1_state = r1
+            dev.relay2_state = r2
+            db_s.commit()
+
+        app = db_s.query(Appliance).first()
+        notif = Notification(
+            user_id=None,
+            device_id=dev.device_id if dev else 1,
+            appliance_id=app.appliance_id if app else None,
+            notification_type="info",
+            message=f"Relay Switched: Smart Plug relay turned {target_state} ({target_channel}).",
+            status="UNREAD",
+            created_at=datetime.utcnow()
+        )
+        db_s.add(notif)
+        db_s.commit()
+        db_s.close()
+    except Exception as e:
+        print("[Relay Notification Error]", e)
 
     return {
         "success": True,

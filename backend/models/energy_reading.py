@@ -8,6 +8,7 @@ class EnergyReading(Base):
     reading_id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
     device_id = Column(BigInteger, ForeignKey('tbl_device.device_id'), nullable=True)
     appliance_id = Column(BigInteger, ForeignKey('tbl_appliance.appliance_id'), nullable=True)
+    user_id = Column(BigInteger, ForeignKey('tbl_user.user_id'), nullable=True)
     voltage = Column(Numeric(8, 2), nullable=True)
     current = Column(Numeric(8, 2), nullable=True)
     power = Column(Numeric(10, 2), nullable=True)
@@ -22,6 +23,7 @@ class EnergyReading(Base):
             "id": self.reading_id,
             "device_id": self.device_id,
             "appliance_id": self.appliance_id,
+            "user_id": self.user_id,
             "voltage": float(self.voltage) if self.voltage is not None else 0.0,
             "current": float(self.current) if self.current is not None else 0.0,
             "power": float(self.power) if self.power is not None else 0.0,

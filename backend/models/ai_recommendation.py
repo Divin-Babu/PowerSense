@@ -6,6 +6,8 @@ class AiRecommendation(Base):
     __tablename__ = 'tbl_ai_recommendation'
 
     recommendation_id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
+    device_id = Column(BigInteger, ForeignKey('tbl_device.device_id'), nullable=True)
+    user_id = Column(BigInteger, ForeignKey('tbl_user.user_id'), nullable=True)
     appliance_id = Column(BigInteger, ForeignKey('tbl_appliance.appliance_id'), nullable=True)
     anomaly_id = Column(BigInteger, ForeignKey('tbl_anomaly.anomaly_id'), nullable=True)
     recommendation = Column(Text, nullable=False)
@@ -16,6 +18,8 @@ class AiRecommendation(Base):
         return {
             "recommendation_id": self.recommendation_id,
             "id": self.recommendation_id,
+            "device_id": self.device_id,
+            "user_id": self.user_id,
             "appliance_id": self.appliance_id,
             "anomaly_id": self.anomaly_id,
             "recommendation": self.recommendation,

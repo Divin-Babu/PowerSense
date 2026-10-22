@@ -7,40 +7,17 @@ import {
   sendEsp32RelayCommand,
   fetchDashboardData,
   fetchAlertsData,
-  fetchKnowledgeData
+  fetchKnowledgeData,
+  createInAppNotificationApi,
+  fetchUserSchedules,
+  createUserSchedule,
+  updateUserSchedule,
+  deleteUserSchedule,
 } from '../services/api';
 
 // ─── Default Smart Schedules & Timer Initial ──────────────────────────────────
 
-const DEFAULT_SCHEDULES: PlugSchedule[] = [
-  {
-    id: 'sch-1',
-    name: 'Night Energy Saver',
-    enabled: true,
-    onTime: '06:30',
-    offTime: '23:30',
-    repeat: 'EVERYDAY',
-    category: 'Standby Saver',
-  },
-  {
-    id: 'sch-2',
-    name: 'Peak Tariff Auto-Cutoff',
-    enabled: true,
-    onTime: '21:00',
-    offTime: '18:00',
-    repeat: 'WEEKDAYS',
-    category: 'Cost Optimization',
-  },
-  {
-    id: 'sch-3',
-    name: 'Morning Routine Appliance',
-    enabled: false,
-    onTime: '07:00',
-    offTime: '08:30',
-    repeat: 'EVERYDAY',
-    category: 'Comfort',
-  },
-];
+const DEFAULT_SCHEDULES: PlugSchedule[] = [];
 
 const INITIAL_TIMER: TimerState = {
   active: false,
@@ -56,8 +33,8 @@ const INITIAL_SINGLE_PLUG: SinglePlugData = {
   id: 'single-plug-01',
   nodeId: 'ESP32-PZEM-PLUG-10A',
   name: 'PowerSense Smart Plug Node',
-  relayState: 'ON',
-  relay1State: 'ON',
+  relayState: 'OFF',
+  relay1State: 'OFF',
   relay2State: 'OFF',
   powerSource: 'HLK-PM01 5V AC-DC',
   selectedLoadId: 'esp32-node',
@@ -143,6 +120,15 @@ interface StoreContextType {
   theme: ThemeMode;
   isDark: boolean;
   themeColors: ThemePalette;
+  inAppToast: {
+    visible: boolean;
+    title: string;
+    message?: string;
+    type: 'info' | 'success' | 'warning' | 'critical';
+  } | null;
+  showInAppNotification: (title: string, message?: string, type?: 'info' | 'success' | 'warning' | 'critical') => void;
+  dismissInAppToast: () => void;
+  refreshUserData: (email?: string) => Promise<void>;
   toggleTheme: () => void;
   setTheme: (theme: ThemeMode) => void;
   togglePlugRelay: () => void;
@@ -150,6 +136,7 @@ interface StoreContextType {
   setPlugRelayState: (targetState: 'ON' | 'OFF') => void;
   selectPlugPreset: (presetId: string) => void;
   triggerSimulatedAnomaly: () => void;
+  simulateLowVoltage: (voltage?: number) => void;
   dismissAlert: (id: string) => void;
   login: (email: string, name?: string, role?: string, phone?: string) => void;
   registerUser: (name: string, email: string, phone?: string) => void;
@@ -179,65 +166,128 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   });
   const [schedules, setSchedules] = useState<PlugSchedule[]>(DEFAULT_SCHEDULES);
   const [timer, setTimer] = useState<TimerState>(INITIAL_TIMER);
+  const [inAppToast, setInAppToast] = useState<{
+    visible: boolean;
+    title: string;
+    message?: string;
+    type: 'info' | 'success' | 'warning' | 'critical';
+  } | null>(null);
 
   const tickerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastTriggeredScheduleRef = useRef<{ [key: string]: number }>({});
+  const userEmailRef = useRef<string | undefined>(state.user?.email);
+  const voltageAlertStateRef = useRef<'normal' | 'low' | 'high'>('normal');
+  const lastVoltageAlertTimeRef = useRef<number>(0);
+
+  useEffect(() => {
+    userEmailRef.current = state.user?.email;
+  }, [state.user?.email]);
+
+  const showInAppNotification = (title: string, message?: string, type: 'info' | 'success' | 'warning' | 'critical' = 'info') => {
+    setInAppToast({ visible: true, title, message, type });
+    const newAlert: AlertItem = {
+      id: `notif-${Date.now()}`,
+      timestamp: 'Just now',
+      type: type === 'critical' ? 'error' : type === 'warning' ? 'warning' : 'info',
+      title,
+      description: message || title,
+      actionable: false,
+    };
+    setState((s) => ({ ...s, alerts: [newAlert, ...s.alerts] }));
+    createInAppNotificationApi({
+      user_email: userEmailRef.current || state.user?.email,
+      title,
+      message,
+      notification_type: type
+    }).catch(() => {});
+  };
+
+  const dismissInAppToast = () => {
+    setInAppToast(null);
+  };
+
+  useEffect(() => {
+    if (!inAppToast) return;
+    const t = setTimeout(() => {
+      setInAppToast(null);
+    }, 4500);
+    return () => clearTimeout(t);
+  }, [inAppToast]);
+
+  // User-scoped data fetcher
+  const loadUserData = async (email?: string) => {
+    try {
+      const targetEmail = email || state.user?.email;
+      const [dashData, alertsData, kbData, schedsData]: [any, any, any, any] = await Promise.all([
+        fetchDashboardData(targetEmail),
+        fetchAlertsData('all', targetEmail),
+        fetchKnowledgeData(),
+        fetchUserSchedules(targetEmail),
+      ]);
+
+      if (Array.isArray(schedsData)) {
+        setSchedules(schedsData);
+        try {
+          const g = globalThis as any;
+          if (typeof g !== 'undefined' && g.localStorage) {
+            g.localStorage.setItem('powersense_schedules', JSON.stringify(schedsData));
+          }
+        } catch (e) { }
+      }
+
+      setState((prev) => {
+        const next = { ...prev };
+        if (dashData?.live) {
+          const isLiveOnline = dashData.live.status === 'ONLINE';
+          next.telemetry = {
+            ...next.telemetry,
+            voltage: isLiveOnline && dashData.live.voltage !== undefined ? dashData.live.voltage : 0.0,
+            currentAmps: isLiveOnline && dashData.live.current !== undefined ? dashData.live.current : 0.0,
+            totalPowerKw: isLiveOnline && dashData.live.watts !== undefined ? dashData.live.watts / 1000.0 : 0.0,
+            powerFactor: isLiveOnline && dashData.live.power_factor !== undefined ? dashData.live.power_factor : 0.0,
+            cumulativeKwh: dashData.today_usage?.kwh !== undefined ? dashData.today_usage.kwh : next.telemetry.cumulativeKwh,
+            costToday: dashData.bill_estimate?.amount ? dashData.bill_estimate.amount / 30.0 : next.telemetry.costToday,
+            gridStatus: isLiveOnline ? "ONLINE" : "STANDBY (ESP32 OFFLINE)",
+          };
+          next.singlePlug = {
+            ...next.singlePlug,
+            watts: isLiveOnline && dashData.live.watts !== undefined ? dashData.live.watts : 0.0,
+            relayState: isLiveOnline ? (dashData.live.relay_state || 'OFF') : 'OFF',
+          };
+        }
+        if (alertsData?.alerts && Array.isArray(alertsData.alerts)) {
+          next.alerts = alertsData.alerts.map((a: any) => ({
+            id: a.id,
+            timestamp: a.time || 'Today',
+            type: a.category === 'critical' ? 'error' : a.category === 'warning' ? 'warning' : 'info',
+            title: a.title,
+            description: a.description,
+            actionable: true,
+            actionText: 'View Details',
+          }));
+        }
+        if (kbData?.documents && Array.isArray(kbData.documents)) {
+          next.ragKnowledgeBase = kbData.documents.map((d: any) => ({
+            id: String(d.id),
+            title: d.title,
+            category: d.category,
+            content: d.content,
+          }));
+        }
+        return next;
+      });
+    } catch (e) {
+      console.log('[Store] DB fetch fallback:', e);
+    }
+  };
+
+  const refreshUserData = async (email?: string) => {
+    await loadUserData(email);
+  };
 
   // Initial database data fetcher on mount
   useEffect(() => {
-    const loadInitialDbData = async () => {
-      try {
-        const [dashData, alertsData, kbData]: [any, any, any] = await Promise.all([
-          fetchDashboardData(),
-          fetchAlertsData('all'),
-          fetchKnowledgeData(),
-        ]);
-
-        setState((prev) => {
-          const next = { ...prev };
-          if (dashData?.live) {
-            next.telemetry = {
-              ...next.telemetry,
-              voltage: dashData.live.voltage !== undefined ? dashData.live.voltage : next.telemetry.voltage,
-              currentAmps: dashData.live.current !== undefined ? dashData.live.current : next.telemetry.currentAmps,
-              totalPowerKw: (dashData.live.watts !== undefined ? dashData.live.watts : 0) / 1000.0,
-              powerFactor: dashData.live.power_factor !== undefined ? dashData.live.power_factor : next.telemetry.powerFactor,
-              cumulativeKwh: dashData.today_usage?.kwh !== undefined ? dashData.today_usage.kwh : next.telemetry.cumulativeKwh,
-              costToday: dashData.bill_estimate?.amount ? dashData.bill_estimate.amount / 30.0 : next.telemetry.costToday,
-            };
-            next.singlePlug = {
-              ...next.singlePlug,
-              watts: dashData.live.watts !== undefined ? dashData.live.watts : next.singlePlug.watts,
-              relayState: dashData.live.relay_state || next.singlePlug.relayState,
-            };
-          }
-          if (alertsData?.alerts && Array.isArray(alertsData.alerts)) {
-            next.alerts = alertsData.alerts.map((a: any) => ({
-              id: a.id,
-              timestamp: a.time || 'Today',
-              type: a.category === 'critical' ? 'error' : a.category === 'warning' ? 'warning' : 'info',
-              title: a.title,
-              description: a.description,
-              actionable: true,
-              actionText: 'View Details',
-            }));
-          }
-          if (kbData?.documents && Array.isArray(kbData.documents)) {
-            next.ragKnowledgeBase = kbData.documents.map((d: any) => ({
-              id: String(d.id),
-              title: d.title,
-              category: d.category,
-              content: d.content,
-            }));
-          }
-          return next;
-        });
-      } catch (e) {
-        console.log('[Store] DB fetch fallback:', e);
-      }
-    };
-
-    loadInitialDbData();
+    loadUserData();
   }, []);
 
   // Sync with live telemetry periodically (1.0 Hz hardware stream rate)
@@ -246,29 +296,83 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       try {
         const live: any = await fetchLiveTelemetry();
         if (live) {
+          const v = live.voltage !== undefined ? Number(live.voltage) : undefined;
+          if (v !== undefined && v > 0) {
+            const now = Date.now();
+            const MIN_OPERATING_V = 50.0;
+            const LOW_VOLTAGE_THRESHOLD = 205.0;
+            const HIGH_VOLTAGE_THRESHOLD = 250.0;
+            const ALERT_COOLDOWN_MS = 60000;
+
+            if (v > MIN_OPERATING_V && v < LOW_VOLTAGE_THRESHOLD) {
+              if (
+                voltageAlertStateRef.current !== 'low' ||
+                now - lastVoltageAlertTimeRef.current > ALERT_COOLDOWN_MS
+              ) {
+                voltageAlertStateRef.current = 'low';
+                lastVoltageAlertTimeRef.current = now;
+                showInAppNotification(
+                  'Low Voltage Warning',
+                  `Mains voltage dropped to ${v.toFixed(1)}V (< ${LOW_VOLTAGE_THRESHOLD}V). Brownout condition detected; appliances may experience stress.`,
+                  'warning'
+                );
+              }
+            } else if (v >= HIGH_VOLTAGE_THRESHOLD) {
+              if (
+                voltageAlertStateRef.current !== 'high' ||
+                now - lastVoltageAlertTimeRef.current > ALERT_COOLDOWN_MS
+              ) {
+                voltageAlertStateRef.current = 'high';
+                lastVoltageAlertTimeRef.current = now;
+                showInAppNotification(
+                  'Overvoltage Surge Alert',
+                  `Mains voltage spiked to ${v.toFixed(1)}V (≥ ${HIGH_VOLTAGE_THRESHOLD}V). Disconnect load to prevent damage!`,
+                  'critical'
+                );
+              }
+            } else if (v >= LOW_VOLTAGE_THRESHOLD && v < HIGH_VOLTAGE_THRESHOLD) {
+              if (voltageAlertStateRef.current === 'low') {
+                voltageAlertStateRef.current = 'normal';
+                showInAppNotification(
+                  'Voltage Restored',
+                  `Line voltage normalized at ${v.toFixed(1)}V within nominal operating range.`,
+                  'success'
+                );
+              } else if (voltageAlertStateRef.current === 'high') {
+                voltageAlertStateRef.current = 'normal';
+                showInAppNotification(
+                  'Voltage Restored',
+                  `Line voltage stabilized at ${v.toFixed(1)}V.`,
+                  'success'
+                );
+              }
+            }
+          }
+          const isOnline = Boolean(live && live.connected && live.status === 'ONLINE');
+
           setState((prev) => ({
             ...prev,
             telemetry: {
               ...prev.telemetry,
-              totalPowerKw: parseFloat((live.power_kw || (live.power_watts ? live.power_watts / 1000.0 : 0)).toFixed(4)),
-              voltage: live.voltage !== undefined ? live.voltage : prev.telemetry.voltage,
-              currentAmps: live.current !== undefined ? live.current : prev.telemetry.currentAmps,
+              totalPowerKw: isOnline ? parseFloat((live.power_kw || (live.power_watts ? live.power_watts / 1000.0 : 0)).toFixed(4)) : 0.0,
+              voltage: isOnline && live.voltage !== undefined ? Number(live.voltage) : 0.0,
+              currentAmps: isOnline && live.current !== undefined ? Number(live.current) : 0.0,
               cumulativeKwh: live.energy_kwh !== undefined ? live.energy_kwh : prev.telemetry.cumulativeKwh,
               costToday: live.cost_today !== undefined ? live.cost_today : prev.telemetry.costToday,
-              gridStatus: live.status || (live.connected ? "ONLINE" : prev.telemetry.gridStatus),
-              powerFactor: live.power_factor !== undefined ? live.power_factor : prev.telemetry.powerFactor,
-              frequency: live.frequency !== undefined ? live.frequency : prev.telemetry.frequency,
-              relay1State: live.relay1_state || prev.telemetry.relay1State || 'ON',
-              relay2State: live.relay2_state || prev.telemetry.relay2State || 'OFF',
+              gridStatus: isOnline ? (live.status || "ONLINE") : "STANDBY (ESP32 OFFLINE)",
+              powerFactor: isOnline && live.power_factor !== undefined ? Number(live.power_factor) : 0.0,
+              frequency: isOnline && live.frequency !== undefined ? Number(live.frequency) : 0.0,
+              relay1State: isOnline ? (live.relay1_state || 'OFF') : 'OFF',
+              relay2State: isOnline ? (live.relay2_state || 'OFF') : 'OFF',
               powerSource: live.power_source || prev.telemetry.powerSource || 'HLK-PM01 5V AC-DC',
             },
             singlePlug: {
               ...prev.singlePlug,
               nodeId: live.device_id || prev.singlePlug.nodeId || 'ESP32-PZEM-PLUG-10A',
-              watts: live.power_watts !== undefined ? Number(live.power_watts) : Number(((live.power_kw || 0) * 1000).toFixed(1)),
-              relayState: live.relay_state || prev.singlePlug.relayState,
-              relay1State: live.relay1_state || prev.singlePlug.relay1State || 'ON',
-              relay2State: live.relay2_state || prev.singlePlug.relay2State || 'OFF',
+              watts: isOnline ? (live.power_watts !== undefined ? Number(live.power_watts) : Number(((live.power_kw || 0) * 1000).toFixed(1))) : 0.0,
+              relayState: isOnline ? (live.relay_state || 'OFF') : 'OFF',
+              relay1State: isOnline ? (live.relay1_state || 'OFF') : 'OFF',
+              relay2State: isOnline ? (live.relay2_state || 'OFF') : 'OFF',
               powerSource: live.power_source || prev.singlePlug.powerSource || 'HLK-PM01 5V AC-DC',
               connectedLoadName: live.device_name || 'ESP32 PZEM Smart Plug',
             },
@@ -313,6 +417,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               if (parsed && parsed.isLoggedIn && parsed.user) {
                 updated.isLoggedIn = true;
                 updated.user = parsed.user;
+                if (parsed.user.email) {
+                  loadUserData(parsed.user.email);
+                }
               }
             } catch (err) { }
           }
@@ -588,23 +695,50 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addSchedule = (newSch: Omit<PlugSchedule, 'id'>) => {
+    const tempId = `sch-${Date.now()}`;
     const item: PlugSchedule = {
       ...newSch,
-      id: `sch-${Date.now()}`,
+      id: tempId,
     };
     setSchedules((prev) => {
       const next = [item, ...prev];
       saveSchedulesToStorage(next);
       return next;
     });
+
+    createUserSchedule({
+      name: newSch.name,
+      onTime: newSch.onTime,
+      offTime: newSch.offTime,
+      repeat: newSch.repeat,
+      category: newSch.category,
+      enabled: newSch.enabled,
+      email: state.user?.email,
+    }).then((res) => {
+      if (res && res.schedule) {
+        setSchedules((prev) => {
+          const next = prev.map((s) => (s.id === tempId ? res.schedule : s));
+          saveSchedulesToStorage(next);
+          return next;
+        });
+      }
+    }).catch((err) => {
+      console.warn('Failed to save schedule to backend:', err);
+    });
   };
 
   const toggleSchedule = (id: string) => {
+    let newEnabled = false;
     setSchedules((prev) => {
+      const target = prev.find((s) => s.id === id);
+      if (target) {
+        newEnabled = !target.enabled;
+      }
       const next = prev.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s));
       saveSchedulesToStorage(next);
       return next;
     });
+    updateUserSchedule(id, { enabled: newEnabled }).catch(() => {});
   };
 
   const deleteSchedule = (id: string) => {
@@ -613,6 +747,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       saveSchedulesToStorage(next);
       return next;
     });
+    deleteUserSchedule(id).catch(() => {});
   };
 
   const updateSchedule = (id: string, updated: Partial<PlugSchedule>) => {
@@ -621,6 +756,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       saveSchedulesToStorage(next);
       return next;
     });
+    updateUserSchedule(id, updated).catch(() => {});
   };
 
   const selectPlugPreset = (presetId: string) => {
@@ -679,6 +815,47 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const simulateLowVoltage = (customVoltage: number = 194.5) => {
+    setState((prev) => {
+      const isCurrentlyLow = prev.telemetry.voltage > 50 && prev.telemetry.voltage < 205;
+      const targetVoltage = isCurrentlyLow ? 230.8 : customVoltage;
+      const isRelayOn = prev.singlePlug.relayState === 'ON';
+      const targetWatts = isRelayOn ? (isCurrentlyLow ? 215 : 160) : 0;
+      const targetAmps = isRelayOn ? parseFloat((targetWatts / targetVoltage).toFixed(2)) : 0.0;
+
+      if (!isCurrentlyLow) {
+        voltageAlertStateRef.current = 'low';
+        lastVoltageAlertTimeRef.current = Date.now();
+        showInAppNotification(
+          'Low Voltage Warning',
+          `Mains line voltage dropped to ${targetVoltage}V (< 205V). Brownout conditions active; sensitive equipment at risk!`,
+          'warning'
+        );
+      } else {
+        voltageAlertStateRef.current = 'normal';
+        showInAppNotification(
+          'Voltage Restored',
+          `Line voltage stabilized at ${targetVoltage}V within nominal operating range.`,
+          'success'
+        );
+      }
+
+      return {
+        ...prev,
+        telemetry: {
+          ...prev.telemetry,
+          voltage: targetVoltage,
+          currentAmps: targetAmps,
+          totalPowerKw: parseFloat((targetWatts / 1000).toFixed(4)),
+        },
+        singlePlug: {
+          ...prev.singlePlug,
+          watts: targetWatts,
+        },
+      };
+    });
+  };
+
   const dismissAlert = (id: string) => {
     setState((prev) => ({
       ...prev,
@@ -718,6 +895,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       isLoggedIn: true,
       user: userObj,
     }));
+
+    loadUserData(userObj.email);
+    showInAppNotification('Welcome Back', `Logged in as ${displayName}.`, 'success');
   };
 
   const registerUser = (name: string, email: string, phone?: string) => {
@@ -725,10 +905,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
+    setSchedules([]);
     try {
       const g = globalThis as any;
       if (typeof g !== 'undefined' && g.localStorage) {
         g.localStorage.removeItem('powersense_session');
+        g.localStorage.removeItem('powersense_schedules');
       }
     } catch (e) { }
 
@@ -740,7 +922,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         full_name: '',
         email: '',
         role: 'user',
-        nodeId: 'ESP32-PZEM-PLUG-01',
+        nodeId: 'ESP32-PZEM-PLUG-10A',
         firmware: 'v3.2.0-single-plug',
       },
     }));
@@ -784,6 +966,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         theme: state.theme,
         isDark,
         themeColors,
+        inAppToast,
+        showInAppNotification,
+        dismissInAppToast,
+        refreshUserData,
         toggleTheme,
         setTheme,
         togglePlugRelay,
@@ -791,6 +977,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setPlugRelayState,
         selectPlugPreset,
         triggerSimulatedAnomaly,
+        simulateLowVoltage,
         dismissAlert,
         login,
         registerUser,

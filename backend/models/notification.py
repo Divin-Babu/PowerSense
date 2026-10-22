@@ -7,6 +7,7 @@ class Notification(Base):
 
     notification_id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
     user_id = Column(BigInteger, ForeignKey('tbl_user.user_id'), nullable=True)
+    device_id = Column(BigInteger, ForeignKey('tbl_device.device_id'), nullable=True)
     appliance_id = Column(BigInteger, ForeignKey('tbl_appliance.appliance_id'), nullable=True)
     notification_type = Column(String(100), nullable=False)  # 'warning', 'info', 'critical', 'success'
     message = Column(Text, nullable=False)
@@ -18,6 +19,7 @@ class Notification(Base):
             "notification_id": self.notification_id,
             "id": self.notification_id,
             "user_id": self.user_id,
+            "device_id": self.device_id,
             "appliance_id": self.appliance_id,
             "notification_type": self.notification_type,
             "category": self.notification_type,

@@ -91,7 +91,7 @@ export default function DashboardScreen() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const data: any = await fetchDashboardData();
+        const data: any = await fetchDashboardData(state.user?.email);
         if (data) {
           if (data.today_usage?.hourly_bars && Array.isArray(data.today_usage.hourly_bars)) {
             setHourlyBars(data.today_usage.hourly_bars);
@@ -109,7 +109,7 @@ export default function DashboardScreen() {
     loadData();
     const interval = setInterval(loadData, 4000);
     return () => clearInterval(interval);
-  }, []);
+  }, [state.user?.email]);
 
   if (!state.isLoggedIn) {
     return <Redirect href="/login" />;
@@ -237,6 +237,34 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* ⚠️ Low Voltage Brownout Warning Banner */}
+        {state.telemetry.voltage > 50 && state.telemetry.voltage < 205 && (
+          <TouchableOpacity
+            style={[
+              styles.voltageWarningBanner,
+              {
+                backgroundColor: isDark ? '#451A03' : '#FFFBEB',
+                borderColor: '#F59E0B',
+              },
+            ]}
+            onPress={() => router.push('/(tabs)/alerts')}
+            activeOpacity={0.85}
+          >
+            <View style={styles.voltageWarningIconBox}>
+              <Ionicons name="warning" size={22} color="#F59E0B" />
+            </View>
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={[styles.voltageWarningTitle, { color: isDark ? '#FDE68A' : '#92400E' }]}>
+                ⚠️ Low Line Voltage: {state.telemetry.voltage.toFixed(1)} V
+              </Text>
+              <Text style={[styles.voltageWarningSub, { color: isDark ? '#FCD34D' : '#B45309' }]}>
+                Mains dropped below 205V threshold. Sensitive compressor motors may stall. Tap to view alerts.
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#F59E0B" />
+          </TouchableOpacity>
+        )}
 
         {/* Hero Card: Real-time Power Output */}
         <LinearGradient
@@ -2157,5 +2185,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  voltageWarningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    marginBottom: 16,
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  voltageWarningIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voltageWarningTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  voltageWarningSub: {
+    fontSize: 11,
+    lineHeight: 15,
   },
 });

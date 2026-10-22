@@ -3,13 +3,20 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 export function getBackendBaseUrl() {
+  // 1. Production cloud URL via environment variable (Vercel / Render / Expo)
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL.replace(/\/$/, '');
+  }
+
+  // 2. Web browser on local development
   if (typeof window !== 'undefined' && window.location && window.location.hostname) {
     const host = window.location.hostname;
-    if (host) {
+    if (host && (host.includes('localhost') || host.includes('127.0.0.1') || host.startsWith('192.') || host.startsWith('10.'))) {
       return `http://${host}:8000`;
     }
   }
 
+  // 3. Expo Go device on local Wi-Fi
   const hostUri =
     Constants.expoConfig?.hostUri ||
     Constants.manifest2?.extra?.expoGo?.debuggerHost ||
@@ -599,9 +606,10 @@ export async function fetchSystemHealth() {
 
 function getDataUrl() { return getDataBaseUrl(); }
 
-export async function fetchDashboardData() {
+export async function fetchDashboardData(email) {
   try {
-    const res = await fetchWithTimeout(`${getDataUrl()}/dashboard`);
+    const query = email ? `?email=${encodeURIComponent(email)}` : '';
+    const res = await fetchWithTimeout(`${getDataUrl()}/dashboard${query}`);
     if (!res.ok) throw new Error('Failed to fetch dashboard data');
     return await res.json();
   } catch (e) {
@@ -609,9 +617,12 @@ export async function fetchDashboardData() {
   }
 }
 
-export async function fetchAnalyticsData(period = 'day') {
+export async function fetchAnalyticsData(period = 'day', email, offset = 0) {
   try {
-    const res = await fetchWithTimeout(`${getDataUrl()}/analytics?period=${encodeURIComponent(period)}`);
+    const qParts = [`period=${encodeURIComponent(period)}`];
+    if (email) qParts.push(`email=${encodeURIComponent(email)}`);
+    if (offset !== undefined && offset !== null) qParts.push(`offset=${encodeURIComponent(offset)}`);
+    const res = await fetchWithTimeout(`${getDataUrl()}/analytics?${qParts.join('&')}`);
     if (!res.ok) throw new Error('Failed to fetch analytics data');
     return await res.json();
   } catch (e) {
@@ -619,9 +630,10 @@ export async function fetchAnalyticsData(period = 'day') {
   }
 }
 
-export async function fetchDevicesData() {
+export async function fetchDevicesData(email) {
   try {
-    const res = await fetchWithTimeout(`${getDataUrl()}/devices`);
+    const query = email ? `?email=${encodeURIComponent(email)}` : '';
+    const res = await fetchWithTimeout(`${getDataUrl()}/devices${query}`);
     if (!res.ok) throw new Error('Failed to fetch devices');
     return await res.json();
   } catch (e) {
@@ -629,13 +641,43 @@ export async function fetchDevicesData() {
   }
 }
 
-export async function fetchAlertsData(category = 'all') {
+export async function fetchAlertsData(category = 'all', email) {
   try {
-    const res = await fetchWithTimeout(`${getDataUrl()}/alerts?category=${encodeURIComponent(category)}`);
+    const qParts = [`category=${encodeURIComponent(category)}`];
+    if (email) qParts.push(`email=${encodeURIComponent(email)}`);
+    const res = await fetchWithTimeout(`${getDataUrl()}/alerts?${qParts.join('&')}`);
     if (!res.ok) throw new Error('Failed to fetch alerts');
     return await res.json();
   } catch (e) {
     return null;
+  }
+}
+
+export async function createInAppNotificationApi({ user_email, title, message, notification_type = 'info' }) {
+  try {
+    const res = await fetch(`${getDataUrl()}/alerts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_email,
+        title,
+        message,
+        notification_type
+      })
+    });
+    return await res.json();
+  } catch (e) {
+    return { success: false, message: e.message };
+  }
+}
+
+export async function markAllAlertsReadApi(email) {
+  try {
+    const query = email ? `?email=${encodeURIComponent(email)}` : '';
+    const res = await fetch(`${getDataUrl()}/alerts/read-all${query}`, { method: 'POST' });
+    return await res.json();
+  } catch (e) {
+    return { success: false };
   }
 }
 
@@ -757,6 +799,66 @@ export async function sendAiChatMessage(question, telemetry = {}) {
     return null;
   }
 }
+
+// ─── Schedule Endpoints ───────────────────────────────────────────────────────
+
+export async function fetchUserSchedules(email) {
+  try {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const url = cleanEmail
+      ? `${DATA_BASE_URL}/schedules?email=${encodeURIComponent(cleanEmail)}`
+      : `${DATA_BASE_URL}/schedules`;
+    const res = await fetchWithTimeout(url, {}, 2500);
+    if (!res.ok) throw new Error('Failed to fetch schedules');
+    const data = await res.json();
+    return data.schedules || [];
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function createUserSchedule(payload) {
+  try {
+    const res = await fetchWithTimeout(`${DATA_BASE_URL}/schedules`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }, 3000);
+    if (!res.ok) throw new Error('Failed to create schedule');
+    return await res.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function updateUserSchedule(scheduleId, payload) {
+  try {
+    const numId = String(scheduleId).replace('sch-', '');
+    const res = await fetchWithTimeout(`${DATA_BASE_URL}/schedules/${numId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }, 3000);
+    if (!res.ok) throw new Error('Failed to update schedule');
+    return await res.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function deleteUserSchedule(scheduleId) {
+  try {
+    const numId = String(scheduleId).replace('sch-', '');
+    const res = await fetchWithTimeout(`${DATA_BASE_URL}/schedules/${numId}`, {
+      method: 'DELETE',
+    }, 3000);
+    if (!res.ok) throw new Error('Failed to delete schedule');
+    return await res.json();
+  } catch (e) {
+    return null;
+  }
+}
+
 
 
 

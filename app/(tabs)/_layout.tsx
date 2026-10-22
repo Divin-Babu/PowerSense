@@ -3,8 +3,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useStore } from '../../src/store/StoreContext';
+import InAppNotificationBanner from '../../src/components/InAppNotificationBanner';
 
-function TabBarIcon({ name, color, size = 22 }: { name: React.ComponentProps<typeof Ionicons>['name']; color: string; size?: number }) {
+function TabBarIcon({ name, color, size = 22 }: { name: React.ComponentProps<typeof Ionicons>['name']; color: string | any; size?: number }) {
   return <Ionicons name={name} size={size} color={color} />;
 }
 
@@ -21,8 +22,10 @@ export default function TabsLayout() {
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'android' ? 16 : 8);
 
   return (
-    <Tabs
-      screenOptions={{
+    <View style={{ flex: 1, backgroundColor: themeColors.background }}>
+      <InAppNotificationBanner />
+      <Tabs
+        screenOptions={{
         headerShown: false,
         tabBarStyle: isAdmin
           ? { display: 'none' } // Hide consumer tab bar for Admin
@@ -119,6 +122,7 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+    </View>
   );
 }
 

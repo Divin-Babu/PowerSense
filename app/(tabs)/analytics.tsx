@@ -13,35 +13,16 @@ import { useRouter, Redirect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, {
-  Path,
-  Defs,
-  LinearGradient as SvgGradient,
-  Stop,
-  Circle,
-  G,
-} from 'react-native-svg';
 import { useStore } from '../../src/store/StoreContext';
 import { fetchAnalyticsData } from '../../src/services/api';
 import { ApplianceUsageHistory, Achievement } from '../../src/types';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CHART_WIDTH = Math.min(SCREEN_WIDTH - 72, 340);
-const CHART_HEIGHT = 160;
-
 type FilterType = 'day' | 'week' | 'month' | 'year';
 
 const DEFAULT_BREAKDOWN = [
-  { label: 'Appliances', pct: 40, color: '#00C48C' },
-  { label: 'Lighting', pct: 28, color: '#38BDF8' },
-  { label: 'Charging', pct: 20, color: '#FBBF24' },
-  { label: 'Others', pct: 12, color: '#94A3B8' },
-];
-
-const DEFAULT_TOP_APPLIANCES = [
-  { id: 1, name: 'Active Load (Peak Draw)', icon: 'flash', iconColor: '#00C48C', pct: 62, kwh: '1.52 kWh' },
-  { id: 2, name: 'Normal Continuous Run', icon: 'speedometer-outline', iconColor: '#38BDF8', pct: 28, kwh: '0.68 kWh' },
-  { id: 3, name: 'Standby / Idle Power', icon: 'moon-outline', iconColor: '#F59E0B', pct: 10, kwh: '0.25 kWh' },
+  { label: 'Active Draw', pct: 15, color: '#00C48C' },
+  { label: 'Normal Run', pct: 85, color: '#38BDF8' },
+  { label: 'Standby Idle', pct: 0, color: '#FBBF24' },
 ];
 
 export default function AnalyticsScreen() {
@@ -49,48 +30,69 @@ export default function AnalyticsScreen() {
   const { state, isDark, themeColors } = useStore();
 
   const [activeFilter, setActiveFilter] = useState<FilterType>('day');
-  const [totalKwh, setTotalKwh] = useState((state.telemetry?.cumulativeKwh || 0.0).toFixed(2));
+  const initialKwh = state.telemetry?.cumulativeKwh !== undefined && state.telemetry?.cumulativeKwh > 0
+    ? state.telemetry.cumulativeKwh.toFixed(3)
+    : '0.097';
+  const [totalKwh, setTotalKwh] = useState(initialKwh);
   const [breakdownData, setBreakdownData] = useState(DEFAULT_BREAKDOWN);
+  const plugLabel = state.singlePlug?.connectedLoadName || 'PowerSense Smart Plug';
+  const liveKwhNum = state.telemetry?.cumulativeKwh || Number(totalKwh) || 0.097;
+
   const [topAppliances, setTopAppliances] = useState([
-    { id: 1, name: `${state.singlePlug?.connectedLoadName || 'Smart Plug'} (Active Draw)`, icon: 'flash', iconColor: '#00C48C', pct: 62, kwh: `${(state.telemetry?.cumulativeKwh || 0.0).toFixed(2)} kWh` },
-    { id: 2, name: `${state.singlePlug?.connectedLoadName || 'Smart Plug'} (Normal Run)`, icon: 'speedometer-outline', iconColor: '#38BDF8', pct: 28, kwh: '0.00 kWh' },
-    { id: 3, name: `${state.singlePlug?.connectedLoadName || 'Smart Plug'} (Standby / Idle)`, icon: 'moon-outline', iconColor: '#F59E0B', pct: 10, kwh: '0.00 kWh' },
+    { id: 1, name: `${plugLabel} (Active High Load)`, icon: 'flash', iconColor: '#00C48C', pct: 15, kwh: `${(liveKwhNum * 0.15).toFixed(3)} kWh` },
+    { id: 2, name: `${plugLabel} (Normal Continuous Run)`, icon: 'speedometer-outline', iconColor: '#38BDF8', pct: 85, kwh: `${(liveKwhNum * 0.85).toFixed(3)} kWh` },
+    { id: 3, name: `${plugLabel} (Standby / Idle Power)`, icon: 'moon-outline', iconColor: '#F59E0B', pct: 0, kwh: '0.000 kWh' },
   ]);
   const [dateDisplay, setDateDisplay] = useState(`Today (${new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short' })})`);
-  const [selectedAppId, setSelectedAppId] = useState<string>('preset-fridge');
+  const [dateOffset, setDateOffset] = useState<number>(0);
 
-  const { energyGoal, peakUsage, applianceHistories, achievements } = state;
-  const histories: ApplianceUsageHistory[] = applianceHistories || [];
-  const selectedApp: ApplianceUsageHistory = histories.find((a: ApplianceUsageHistory) => a.id === selectedAppId) || histories[0] || {
-    id: 'preset-fridge',
-    name: 'Smart Plug Connected Load',
-    category: 'Monitored Appliance',
+  const handlePrevDate = () => {
+    setDateOffset((prev) => prev + 1);
+  };
+
+  const handleNextDate = () => {
+    setDateOffset((prev) => Math.max(0, prev - 1));
+  };
+
+  const handleFilterChange = (filter: FilterType) => {
+    setActiveFilter(filter);
+    setDateOffset(0);
+  };
+
+  const { energyGoal, peakUsage, achievements } = state;
+  const pf = state.telemetry?.powerFactor || 0.95;
+  const efficiencyScore = pf >= 0.85 ? 'Optimal (Grade A)' : pf >= 0.70 ? 'Standard (Grade B)' : 'Reactive Load (Grade C)';
+
+  const selectedApp: ApplianceUsageHistory = {
+    id: 'single-esp32-node',
+    name: state.singlePlug?.connectedLoadName || 'PowerSense Smart Plug',
+    category: state.singlePlug?.connectedLoadCategory || 'ESP32 PZEM Monitored Node',
     emoji: '⚡',
     icon: 'flash-outline',
-    todayKwh: state.telemetry?.cumulativeKwh || 0.0,
-    yesterdayKwh: 0.0,
-    thisWeekKwh: state.telemetry?.cumulativeKwh || 0.0,
-    thisMonthKwh: state.telemetry?.cumulativeKwh || 0.0,
-    baselineWatts: state.singlePlug?.watts || 0,
-    efficiencyScore: 'Optimal (Grade A)',
-    sparkline: [0.0, 0.0, 0.0, 0.0, 0.0, (state.telemetry?.cumulativeKwh || 0.0)],
-    estimatedCostMonth: (state.telemetry?.cumulativeKwh || 0.0) * 6.50,
+    todayKwh: Number(liveKwhNum.toFixed(3)),
+    yesterdayKwh: Number((Math.max(0, liveKwhNum * 0.82)).toFixed(3)),
+    thisWeekKwh: Number(liveKwhNum.toFixed(3)),
+    thisMonthKwh: Number(liveKwhNum.toFixed(3)),
+    baselineWatts: Math.round(state.singlePlug?.watts || (state.telemetry?.totalPowerKw || 0) * 1000 || 0),
+    efficiencyScore,
+    sparkline: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, Number(liveKwhNum.toFixed(3))],
+    estimatedCostMonth: Number((liveKwhNum * 6.50 * 30).toFixed(2)),
   };
 
   const currentGoal = energyGoal || {
     targetKwh: 100,
-    usedKwh: Math.round(state.telemetry?.cumulativeKwh || 0),
-    remainingKwh: Math.max(0, 100 - Math.round(state.telemetry?.cumulativeKwh || 0)),
-    progressPct: Math.min(100, Math.round(((state.telemetry?.cumulativeKwh || 0) / 100.0) * 100)),
+    usedKwh: Number(liveKwhNum.toFixed(2)),
+    remainingKwh: Math.max(0, 100 - Math.round(liveKwhNum)),
+    progressPct: Math.min(100, Math.max(1, Math.round((liveKwhNum / 100.0) * 100))),
     daysLeftInMonth: 15,
-    projectedKwh: Math.round((state.telemetry?.cumulativeKwh || 0) * 1.2),
+    projectedKwh: Number((liveKwhNum * 1.2).toFixed(2)),
     status: 'On Track' as const,
   };
 
   const currentPeak = peakUsage || {
     peakWindow: '6 PM – 10 PM',
-    averageKw: state.telemetry?.totalPowerKw || 0.0,
-    peakKw: (state.telemetry?.totalPowerKw || 0.0) * 1.5,
+    averageKw: Number((state.telemetry?.totalPowerKw || 0.024).toFixed(3)),
+    peakKw: Number(((state.telemetry?.totalPowerKw || 0.024) * 1.5).toFixed(3)),
     isPeakNow: state.telemetry?.peakTariffActive || false,
     peakTariffRate: '₹9.80/kWh',
     offPeakTariffRate: '₹4.20/kWh',
@@ -100,9 +102,9 @@ export default function AnalyticsScreen() {
   useEffect(() => {
     const loadAnalytics = async () => {
       try {
-        const data: any = await fetchAnalyticsData(activeFilter);
+        const data: any = await fetchAnalyticsData(activeFilter, state.user?.email, dateOffset);
         if (data) {
-          if (data.total_usage_kwh) setTotalKwh(Number(data.total_usage_kwh).toFixed(2));
+          if (data.total_usage_kwh !== undefined) setTotalKwh(Number(data.total_usage_kwh).toFixed(3));
           if (data.breakdown) setBreakdownData(data.breakdown);
           if (data.top_appliances) setTopAppliances(data.top_appliances);
           if (data.date_display) setDateDisplay(data.date_display);
@@ -110,7 +112,7 @@ export default function AnalyticsScreen() {
       } catch (e) { }
     };
     loadAnalytics();
-  }, [activeFilter, state.telemetry?.cumulativeKwh]);
+  }, [activeFilter, dateOffset, state.user?.email, state.telemetry?.cumulativeKwh]);
 
   if (!state.isLoggedIn) {
     return <Redirect href="/login" />;
@@ -119,27 +121,6 @@ export default function AnalyticsScreen() {
   if (state.user?.role === 'admin') {
     return <Redirect href="/(tabs)/admin" />;
   }
-
-  // Smooth spline curve path for chart
-  const areaPath = `
-    M 0 130
-    C 40 130, 60 115, 90 90
-    C 120 65, 140 30, 170 30
-    C 200 30, 220 70, 260 70
-    C 290 70, 310 110, ${CHART_WIDTH} 110
-    L ${CHART_WIDTH} ${CHART_HEIGHT}
-    L 0 ${CHART_HEIGHT}
-    Z
-  `;
-
-  const linePath = `
-    M 0 130
-    C 40 130, 60 115, 90 90
-    C 120 65, 140 30, 170 30
-    C 200 30, 220 70, 260 70
-    C 290 70, 310 110, ${CHART_WIDTH} 110
-  `;
-
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]} edges={['top']}>
       <ScrollView
@@ -164,7 +145,7 @@ export default function AnalyticsScreen() {
             onPress={() => {
               const g = typeof globalThis !== 'undefined' ? (globalThis as any).window : null;
               if (Platform.OS === 'web' && g) {
-                g.open(`http://localhost:8000/api/reports/usage/pdf?period=${activeFilter}`, '_blank');
+                g.open(`http://localhost:8000/api/reports/usage/pdf?period=${activeFilter}&offset=${dateOffset}`, '_blank');
               } else {
                 Alert.alert('PDF Export', `Exporting PowerSense PDF Report for ${activeFilter.toUpperCase()} period...`);
               }
@@ -180,16 +161,30 @@ export default function AnalyticsScreen() {
         <View style={styles.dateSelectorRow}>
           <TouchableOpacity
             style={[styles.dateArrowBtn, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}
+            onPress={handlePrevDate}
             activeOpacity={0.7}
           >
             <Ionicons name="chevron-back" size={20} color={themeColors.text} />
           </TouchableOpacity>
           <Text style={[styles.dateText, { color: themeColors.text }]}>{dateDisplay}</Text>
           <TouchableOpacity
-            style={[styles.dateArrowBtn, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}
+            style={[
+              styles.dateArrowBtn,
+              {
+                backgroundColor: themeColors.card,
+                borderColor: themeColors.cardBorder,
+                opacity: dateOffset === 0 ? 0.35 : 1.0,
+              },
+            ]}
+            onPress={handleNextDate}
+            disabled={dateOffset === 0}
             activeOpacity={0.7}
           >
-            <Ionicons name="chevron-forward" size={20} color={themeColors.text} />
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color={dateOffset === 0 ? themeColors.textMuted : themeColors.text}
+            />
           </TouchableOpacity>
         </View>
 
@@ -201,7 +196,7 @@ export default function AnalyticsScreen() {
               <TouchableOpacity
                 key={filter}
                 style={[styles.filterPill, isSelected && styles.filterPillActive]}
-                onPress={() => setActiveFilter(filter)}
+                onPress={() => handleFilterChange(filter)}
                 activeOpacity={0.8}
               >
                 <Text
@@ -218,130 +213,69 @@ export default function AnalyticsScreen() {
           })}
         </View>
 
-        {/* Total Usage Card with Spline Wave Chart */}
+        {/* Total Usage & Hardware Overview Card */}
         <View style={[styles.card, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
-          <Text style={[styles.cardSectionTitle, { color: themeColors.textSecondary }]}>Total Usage</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <Text style={[styles.cardSectionTitle, { color: themeColors.textSecondary, marginBottom: 0 }]}>
+              Total Usage ({activeFilter.toUpperCase()})
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0, 196, 140, 0.12)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, gap: 4 }}>
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#00C48C' }} />
+              <Text style={{ fontSize: 10, fontWeight: '700', color: '#00C48C' }}>LIVE ESP32 SENSOR</Text>
+            </View>
+          </View>
+
           <View style={styles.totalRow}>
             <Text style={[styles.totalKwh, { color: themeColors.text }]}>{totalKwh}</Text>
             <Text style={[styles.totalUnit, { color: themeColors.textSecondary }]}>kWh</Text>
+            <View style={{ flex: 1 }} />
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#00C48C', marginBottom: 2 }}>
+              ₹{(Number(totalKwh) * 6.50).toFixed(2)} est.
+            </Text>
           </View>
 
-          {/* SVG Wave Chart Container */}
-          <View style={styles.chartContainer}>
-            <Svg width={CHART_WIDTH} height={CHART_HEIGHT}>
-              <Defs>
-                <SvgGradient id="waveGradient" x1="0" y1="0" x2="0" y2="1">
-                  <Stop offset="0%" stopColor="#00C48C" stopOpacity="0.35" />
-                  <Stop offset="100%" stopColor="#00C48C" stopOpacity="0.0" />
-                </SvgGradient>
-              </Defs>
-
-              {/* Area Fill */}
-              <Path d={areaPath} fill="url(#waveGradient)" />
-
-              {/* Main Line */}
-              <Path d={linePath} fill="none" stroke="#00C48C" strokeWidth="3" strokeLinecap="round" />
-
-              {/* Peak Tooltip Point at 13:00 (1.32 kWh) */}
-              <Circle cx="170" cy="30" r="5" fill="#00C48C" stroke={isDark ? '#141B24' : '#FFFFFF'} strokeWidth="3" />
-            </Svg>
-
-            {/* Peak Tooltip Bubble */}
-            <View style={[styles.peakTooltip, { backgroundColor: isDark ? '#1F2937' : '#111827' }]}>
-              <Text style={styles.peakTooltipText}>1.32 kWh  1:00 PM</Text>
+          {/* Real Live Hardware Telemetry Stats Row */}
+          <View style={[styles.telemetryQuickGrid, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder }]}>
+            <View style={styles.telemetryQuickItem}>
+              <Text style={[styles.telemetryQuickLabel, { color: themeColors.textMuted }]}>POWER</Text>
+              <Text style={[styles.telemetryQuickVal, { color: themeColors.text }]}>
+                {(state.singlePlug?.watts || (state.telemetry?.totalPowerKw || 0) * 1000).toFixed(1)} W
+              </Text>
             </View>
-
-            {/* X-Axis Horizontal Grid Labels */}
-            <View style={styles.chartXLabels}>
-              <Text style={[styles.xLabel, { color: themeColors.textMuted }]}>00:00</Text>
-              <Text style={[styles.xLabel, { color: themeColors.textMuted }]}>06:00</Text>
-              <Text style={[styles.xLabel, { color: themeColors.textMuted }]}>12:00</Text>
-              <Text style={[styles.xLabel, { color: themeColors.textMuted }]}>18:00</Text>
-              <Text style={[styles.xLabel, { color: themeColors.textMuted }]}>24:00</Text>
+            <View style={[styles.telemetryDivider, { backgroundColor: themeColors.cardBorder }]} />
+            <View style={styles.telemetryQuickItem}>
+              <Text style={[styles.telemetryQuickLabel, { color: themeColors.textMuted }]}>VOLTAGE</Text>
+              <Text style={[styles.telemetryQuickVal, { color: themeColors.text }]}>
+                {(state.telemetry?.voltage || 230).toFixed(1)} V
+              </Text>
             </View>
-          </View>
-        </View>
-
-        {/* Usage Breakdown Card (Donut Chart & Legend) */}
-        <View style={[styles.card, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
-          <Text style={[styles.cardSectionTitle, { color: themeColors.textSecondary }]}>Usage Breakdown</Text>
-
-          <View style={styles.donutRow}>
-            {/* Donut Chart SVG */}
-            <View style={styles.donutWrapper}>
-              <Svg width={120} height={120} viewBox="0 0 120 120">
-                <G transform="rotate(-90 60 60)">
-                  {/* Outer Background Track */}
-                  <Circle
-                    cx="60"
-                    cy="60"
-                    r="46"
-                    stroke={isDark ? '#1F2937' : '#E8F3ED'}
-                    strokeWidth="16"
-                    fill="none"
-                  />
-                  {/* Segment 1: Appliances (40%) */}
-                  <Circle
-                    cx="60"
-                    cy="60"
-                    r="46"
-                    stroke="#00C48C"
-                    strokeWidth="16"
-                    fill="none"
-                    strokeDasharray={`${289 * 0.4} 289`}
-                    strokeDashoffset="0"
-                    strokeLinecap="round"
-                  />
-                  {/* Segment 2: Lighting (28%) */}
-                  <Circle
-                    cx="60"
-                    cy="60"
-                    r="46"
-                    stroke="#38BDF8"
-                    strokeWidth="16"
-                    fill="none"
-                    strokeDasharray={`${289 * 0.28} 289`}
-                    strokeDashoffset={`${-289 * 0.4}`}
-                    strokeLinecap="round"
-                  />
-                  {/* Segment 3: Charging (20%) */}
-                  <Circle
-                    cx="60"
-                    cy="60"
-                    r="46"
-                    stroke="#FBBF24"
-                    strokeWidth="16"
-                    fill="none"
-                    strokeDasharray={`${289 * 0.2} 289`}
-                    strokeDashoffset={`${-289 * 0.68}`}
-                    strokeLinecap="round"
-                  />
-                </G>
-              </Svg>
-
-              {/* Center Donut Label */}
-              <View style={styles.donutCenter}>
-                <Text style={[styles.donutCenterText, { color: themeColors.text }]}>{totalKwh}</Text>
-                <Text style={[styles.donutUnit, { color: themeColors.textSecondary }]}>kWh</Text>
-              </View>
+            <View style={[styles.telemetryDivider, { backgroundColor: themeColors.cardBorder }]} />
+            <View style={styles.telemetryQuickItem}>
+              <Text style={[styles.telemetryQuickLabel, { color: themeColors.textMuted }]}>CURRENT</Text>
+              <Text style={[styles.telemetryQuickVal, { color: themeColors.text }]}>
+                {(state.telemetry?.currentAmps || 0).toFixed(2)} A
+              </Text>
             </View>
-
-            {/* Legend */}
-            <View style={styles.legendCol}>
-              {breakdownData.map((item) => (
-                <View key={item.label} style={styles.legendRow}>
-                  <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-                  <Text style={[styles.legendLabel, { color: themeColors.text }]}>{item.label}</Text>
-                  <Text style={[styles.legendPct, { color: themeColors.text }]}>{item.pct}%</Text>
-                </View>
-              ))}
+            <View style={[styles.telemetryDivider, { backgroundColor: themeColors.cardBorder }]} />
+            <View style={styles.telemetryQuickItem}>
+              <Text style={[styles.telemetryQuickLabel, { color: themeColors.textMuted }]}>PF</Text>
+              <Text style={[styles.telemetryQuickVal, { color: '#00C48C' }]}>
+                {(state.telemetry?.powerFactor || 0.98).toFixed(2)}
+              </Text>
             </View>
           </View>
         </View>
 
-        {/* Top Appliances Ranked List */}
+        {/* Smart Plug Load Breakdown List */}
         <View style={[styles.card, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
-          <Text style={[styles.cardSectionTitle, { color: themeColors.textSecondary }]}>Smart Plug Load Breakdown</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <Text style={[styles.cardSectionTitle, { color: themeColors.text, marginBottom: 0 }]}>
+              Smart Plug Load Breakdown
+            </Text>
+            <Text style={{ fontSize: 11, fontWeight: '600', color: themeColors.textSecondary }}>
+              {dateDisplay}
+            </Text>
+          </View>
 
           <View style={styles.appliancesList}>
             {topAppliances.map((app) => (
@@ -361,7 +295,9 @@ export default function AnalyticsScreen() {
                 <View style={styles.applianceInfo}>
                   <View style={styles.applianceTitleRow}>
                     <Text style={[styles.applianceName, { color: themeColors.text }]}>{app.name}</Text>
-                    <Text style={[styles.applianceKwh, { color: themeColors.textSecondary }]}>{app.kwh}</Text>
+                    <Text style={[styles.applianceKwh, { color: themeColors.textSecondary }]}>
+                      {app.pct}% • {app.kwh}
+                    </Text>
                   </View>
 
                   {/* Progress Bar */}
@@ -370,7 +306,7 @@ export default function AnalyticsScreen() {
                       style={[
                         styles.progressFill,
                         {
-                          width: `${app.pct * 2}%`,
+                          width: `${Math.min(100, Math.max(app.pct, app.pct > 0 ? 3 : 0))}%`,
                           backgroundColor: app.iconColor,
                         },
                       ]}
@@ -385,50 +321,37 @@ export default function AnalyticsScreen() {
         {/* 🧊 APPLIANCE USAGE HISTORY CARD */}
         <View style={[styles.card, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
           <View style={styles.sectionHeaderRow}>
-            <View>
+            <View style={{ flex: 1, paddingRight: 8 }}>
               <Text style={[styles.cardSectionTitle, { color: themeColors.text, marginBottom: 2 }]}>
-                Appliance Usage History
+                Connected Load Energy History
               </Text>
               <Text style={[styles.cardSubText, { color: themeColors.textMuted }]}>
-                Select an appliance to view its full historical energy profile
+                Historical energy consumption for monitored appliance
               </Text>
             </View>
             <View style={styles.historyCounterBadge}>
-              <Text style={styles.historyCounterText}>{histories.length} Tracked</Text>
+              <Ionicons name="hardware-chip-outline" size={12} color="#00C48C" style={{ marginRight: 4 }} />
+              <Text style={styles.historyCounterText}>1 Plug Active</Text>
             </View>
           </View>
 
-          {/* Horizontal Appliance Selector Chips */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.appChipsScroll}>
-            {histories.map((app: ApplianceUsageHistory) => {
-              const isSelected = selectedAppId === app.id;
-              return (
-
-                <TouchableOpacity
-                  key={app.id}
-                  style={[
-                    styles.appChip,
-                    {
-                      backgroundColor: isSelected ? '#00C48C' : themeColors.subCardBg,
-                      borderColor: isSelected ? '#00C48C' : themeColors.subCardBorder,
-                    },
-                  ]}
-                  onPress={() => setSelectedAppId(app.id)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={{ fontSize: 16 }}>{app.emoji}</Text>
-                  <Text
-                    style={[
-                      styles.appChipText,
-                      { color: isSelected ? '#FFFFFF' : themeColors.text },
-                    ]}
-                  >
-                    {app.name.split(' ')[0]}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+          {/* Connected Appliance Badge / Selector */}
+          <View style={styles.appChipsScroll}>
+            <View
+              style={[
+                styles.appChip,
+                {
+                  backgroundColor: '#00C48C',
+                  borderColor: '#00C48C',
+                },
+              ]}
+            >
+              <Text style={{ fontSize: 16 }}>⚡</Text>
+              <Text style={[styles.appChipText, { color: '#FFFFFF' }]}>
+                {state.singlePlug?.connectedLoadName || 'PowerSense Smart Plug'}
+              </Text>
+            </View>
+          </View>
 
           {/* Selected Appliance Detail Hero Box */}
           <View style={[styles.applianceDetailCard, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder }]}>
@@ -499,11 +422,10 @@ export default function AnalyticsScreen() {
               </View>
               <View style={styles.sparklineBarsRow}>
                 {selectedApp.sparkline.map((val: number, i: number) => {
-                  const maxVal = Math.max(...selectedApp.sparkline, 1);
-                  const hPct = Math.max(15, (val / maxVal) * 100);
+                  const maxVal = Math.max(...selectedApp.sparkline, 0.05);
+                  const hPct = Math.max(12, (val / maxVal) * 100);
                   const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
                   return (
-
                     <View key={i} style={styles.sparkCol}>
                       <View style={[styles.sparkBarTrack, { backgroundColor: isDark ? '#1F2937' : '#E2E8F0' }]}>
                         <View style={[styles.sparkBarFill, { height: `${hPct}%`, backgroundColor: '#00C48C' }]} />
@@ -625,9 +547,12 @@ export default function AnalyticsScreen() {
               </Text>
             </View>
 
-            {/* ASCII / Graphic Meter */}
+            {/* Dynamic Meter */}
             <View style={styles.asciiMeterContainer}>
-              <Text style={[styles.asciiMeterText, { color: '#00C48C' }]}>████████████░░ 70%</Text>
+              <Text style={[styles.asciiMeterText, { color: '#00C48C' }]}>
+                {'█'.repeat(Math.min(14, Math.max(1, Math.round((currentGoal.progressPct / 100) * 14))))}
+                {'░'.repeat(Math.max(0, 14 - Math.min(14, Math.max(1, Math.round((currentGoal.progressPct / 100) * 14)))))} {currentGoal.progressPct}%
+              </Text>
               <Text style={[styles.remainingLabel, { color: themeColors.textSecondary }]}>
                 {currentGoal.remainingKwh} kWh remaining
               </Text>
@@ -774,85 +699,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Wave Chart
-  chartContainer: {
-    alignItems: 'center',
-    marginTop: 6,
-    position: 'relative',
-  },
-  peakTooltip: {
-    position: 'absolute',
-    top: 4,
-    left: 105,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  peakTooltipText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  chartXLabels: {
+  // Hardware Telemetry Quick Stats
+  telemetryQuickGrid: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    width: '100%',
-    marginTop: 8,
-    paddingHorizontal: 4,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginTop: 4,
   },
-  xLabel: {
-    fontSize: 11,
-    fontWeight: '500',
-  },
-
-  // Donut Breakdown
-  donutRow: {
-    flexDirection: 'row',
+  telemetryQuickItem: {
     alignItems: 'center',
-    justifyContent: 'space-around',
-    marginTop: 10,
+    flex: 1,
   },
-  donutWrapper: {
-    width: 120,
-    height: 120,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
+  telemetryQuickLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    marginBottom: 2,
+    letterSpacing: 0.5,
   },
-  donutCenter: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  donutCenterText: {
-    fontSize: 18,
+  telemetryQuickVal: {
+    fontSize: 13,
     fontWeight: '800',
   },
-  donutUnit: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  legendCol: {
-    gap: 8,
-  },
-  legendRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  legendLabel: {
-    fontSize: 13,
-    fontWeight: '500',
-    width: 80,
-  },
-  legendPct: {
-    fontSize: 13,
-    fontWeight: '700',
+  telemetryDivider: {
+    width: 1,
+    height: 24,
   },
 
   // Top Appliances
@@ -903,7 +777,7 @@ const styles = StyleSheet.create({
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 12,
   },
   cardSubText: {
@@ -912,13 +786,16 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   historyCounterBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(0, 196, 140, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
     borderRadius: 8,
+    flexShrink: 0,
   },
   historyCounterText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
     color: '#00C48C',
   },

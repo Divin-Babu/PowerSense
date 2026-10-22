@@ -49,7 +49,7 @@ const APPLIANCE_PRESETS = [
 
 export default function BleProvisionScreen() {
   const router = useRouter();
-  const { state, isDark, themeColors } = useStore();
+  const { state, isDark, themeColors, showInAppNotification } = useStore();
 
   const [step, setStep] = useState<ProvisionStep>('start');
   const [selectedBle, setSelectedBle] = useState<BleDevice | null>(null);
@@ -105,7 +105,7 @@ export default function BleProvisionScreen() {
     let realFoundDevices: BleDevice[] = [];
 
     // A. Check Web Bluetooth API & Already-Paired Phone Bluetooth Devices
-    const nav = typeof navigator !== 'undefined' ? (navigator as any) : null;
+    const nav = typeof globalThis !== 'undefined' && (globalThis as any).navigator ? (globalThis as any).navigator : null;
     let blePermissionError: string | null = null;
 
     if (nav && nav.bluetooth) {
@@ -256,6 +256,7 @@ export default function BleProvisionScreen() {
       await provisionDeviceApi(payload);
     } catch (e) {}
 
+    showInAppNotification('Smart Plug Paired', `${applianceName} Plug (${devUid}) successfully added to your account!`, 'success');
     setIsRegistering(false);
     setStep('success');
   };

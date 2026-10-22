@@ -9,6 +9,7 @@ from .anomaly import Anomaly
 from .ai_recommendation import AiRecommendation
 from .knowledge_document import KnowledgeDocument
 from .notification import Notification
+from .schedule import Schedule
 
 __all__ = [
     "User",
@@ -22,4 +23,5 @@ __all__ = [
     "AiRecommendation",
     "KnowledgeDocument",
     "Notification",
+    "Schedule",
 ]

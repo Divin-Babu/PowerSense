@@ -12,6 +12,7 @@
 */
 
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <WiFiProv.h>
 #include <PubSubClient.h>
 #include <HTTPClient.h>
@@ -48,13 +49,18 @@ const char* BLE_PROV_NAME = "PowerSense-PLUG-A12345";
 // ─── DIRECT WI-FI & SERVER CONFIGURATION ─────────────────────────────────────
 const char* DIRECT_WIFI_SSID  = "vivo Y75";       // Set your Wi-Fi SSID
 const char* DIRECT_WIFI_PASS  = "1133557799";   // Set your Wi-Fi Password
-const char* BACKEND_SERVER_IP = "10.170.121.5";     // Laptop IP running FastAPI
+
+// Cloud Deployment Toggle: Set to true for Render cloud, false for local PC IP
+#define USE_CLOUD_HOST        true
+const char* RENDER_CLOUD_HOST = "powersense-backend.onrender.com"; // Replace with your actual Render URL domain
+const char* BACKEND_SERVER_IP = "10.170.121.5";                    // Local FastAPI IP
 const int   HTTP_PORT         = 8000;
 const int   MQTT_PORT         = 1883;
+
 char telemetryTopic[64];
 char relayCommandTopic[64];
-char httpEndpoint[128];
-char relayPollEndpoint[128];
+char httpEndpoint[256];
+char relayPollEndpoint[256];
 
 // ─── Peripheral Drivers & Objects ────────────────────────────────────────────
 WiFiClient espClient;
@@ -150,8 +156,14 @@ void pollRelayStateOverHttp() {
   if (WiFi.status() != WL_CONNECTED) return;
 
   HTTPClient http;
+#if USE_CLOUD_HOST
+  WiFiClientSecure secClient;
+  secClient.setInsecure(); // Bypass CA certificate check for Render SSL
+  http.begin(secClient, relayPollEndpoint);
+#else
   http.begin(relayPollEndpoint);
-  http.setTimeout(1000);
+#endif
+  http.setTimeout(3000);
 
   int httpCode = http.GET();
   if (httpCode == 200) {
@@ -185,9 +197,15 @@ void sendHttpTelemetry(const char* jsonPayload) {
   if (WiFi.status() != WL_CONNECTED) return;
 
   HTTPClient http;
+#if USE_CLOUD_HOST
+  WiFiClientSecure secClient;
+  secClient.setInsecure(); // Bypass CA certificate check for Render SSL
+  http.begin(secClient, httpEndpoint);
+#else
   http.begin(httpEndpoint);
+#endif
   http.addHeader("Content-Type", "application/json");
-  http.setTimeout(1000);
+  http.setTimeout(4000);
 
   int httpCode = http.POST(jsonPayload);
   if (httpCode <= 0) {
@@ -218,8 +236,14 @@ void setup() {
   // Build Endpoints & Topics
   snprintf(telemetryTopic, sizeof(telemetryTopic), "powersense/nodes/%s/telemetry", DEVICE_UID);
   snprintf(relayCommandTopic, sizeof(relayCommandTopic), "powersense/nodes/%s/relay", DEVICE_UID);
+
+#if USE_CLOUD_HOST
+  snprintf(httpEndpoint, sizeof(httpEndpoint), "https://%s/api/esp32/telemetry", RENDER_CLOUD_HOST);
+  snprintf(relayPollEndpoint, sizeof(relayPollEndpoint), "https://%s/api/esp32/relay?device_id=%s", RENDER_CLOUD_HOST, DEVICE_UID);
+#else
   snprintf(httpEndpoint, sizeof(httpEndpoint), "http://%s:%d/api/esp32/telemetry", BACKEND_SERVER_IP, HTTP_PORT);
   snprintf(relayPollEndpoint, sizeof(relayPollEndpoint), "http://%s:%d/api/esp32/relay?device_id=%s", BACKEND_SERVER_IP, HTTP_PORT, DEVICE_UID);
+#endif
 
   // Configure MQTT
   mqttClient.setServer(BACKEND_SERVER_IP, MQTT_PORT);

@@ -11,7 +11,7 @@ import { useRouter, Redirect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useStore } from '../../src/store/StoreContext';
-import { fetchAlertsData } from '../../src/services/api';
+import { fetchAlertsData, markAllAlertsReadApi } from '../../src/services/api';
 
 type AlertFilter = 'all' | 'critical' | 'warning' | 'info';
 
@@ -41,7 +41,7 @@ const DEFAULT_ALERTS = [
   {
     id: '3',
     title: 'Target Achieved',
-    description: 'Congratulations! You reached 78% of your 100 kWh monthly energy goal.',
+    description: 'Congratulations! You reached 78% of your monthly energy goal.',
     time: 'Yesterday',
     category: 'info',
     icon: 'checkmark-circle',
@@ -52,7 +52,7 @@ const DEFAULT_ALERTS = [
   {
     id: '4',
     title: 'Device Turned On',
-    description: 'Living Room Plug turned ON automatically via programmed daily timer.',
+    description: 'Smart Plug relay turned ON automatically via programmed routine.',
     time: '14 May',
     category: 'info',
     icon: 'power',
@@ -64,17 +64,25 @@ const DEFAULT_ALERTS = [
 
 export default function AlertsScreen() {
   const router = useRouter();
-  const { state, dismissAlert, isDark, themeColors } = useStore();
+  const { state, dismissAlert, isDark, themeColors, showInAppNotification } = useStore();
 
   const [activeFilter, setActiveFilter] = useState<AlertFilter>('all');
   const [apiAlerts, setApiAlerts] = useState<any[]>([]);
 
   const loadAlerts = async (cat: string) => {
     try {
-      const data: any = await fetchAlertsData(cat);
+      const data: any = await fetchAlertsData(cat, state.user?.email);
       if (data?.alerts && Array.isArray(data.alerts)) {
         setApiAlerts(data.alerts);
       }
+    } catch (e) {}
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await markAllAlertsReadApi(state.user?.email);
+      setApiAlerts((prev) => prev.map((a) => ({ ...a, unread: false })));
+      showInAppNotification('Notifications Cleared', 'All alerts marked as read.', 'success');
     } catch (e) {}
   };
 
@@ -82,7 +90,7 @@ export default function AlertsScreen() {
     loadAlerts(activeFilter);
     const interval = setInterval(() => loadAlerts(activeFilter), 4000);
     return () => clearInterval(interval);
-  }, [activeFilter]);
+  }, [activeFilter, state.user?.email]);
 
   if (!state.isLoggedIn) {
     return <Redirect href="/login" />;
@@ -123,6 +131,14 @@ export default function AlertsScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Text style={[styles.headerTitle, { color: themeColors.text }]}>Alerts & Notifications</Text>
+          <TouchableOpacity
+            style={[styles.markReadBtn, { backgroundColor: isDark ? 'rgba(0, 196, 140, 0.15)' : '#E8FBF4', borderColor: isDark ? '#00C48C40' : '#C5F0E1' }]}
+            onPress={handleMarkAllRead}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="checkmark-done" size={14} color="#00C48C" />
+            <Text style={styles.markReadText}>Mark All Read</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Filter Pills */}
@@ -251,12 +267,28 @@ const styles = StyleSheet.create({
 
   // Header
   header: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 16,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
+  },
+  markReadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 4,
+  },
+  markReadText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#00C48C',
   },
 
   // Filter Pills

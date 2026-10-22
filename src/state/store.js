@@ -378,6 +378,66 @@ class Store {
     }
   }
 
+  triggerSimulatedLowVoltage(customVoltage = 194.5) {
+    const isCurrentlyLow = this.state.telemetry.voltage > 50 && this.state.telemetry.voltage < 205;
+    if (!isCurrentlyLow) {
+      const isRelayOn = this.state.singlePlug.relayState === 'ON';
+      const brownWatts = isRelayOn ? 160 : 0;
+      const brownAmps = isRelayOn ? parseFloat((brownWatts / customVoltage).toFixed(2)) : 0;
+
+      const newAlert = {
+        id: `alt-uv-${Date.now()}`,
+        timestamp: 'Just now',
+        type: 'warning',
+        title: '⚠️ LOW VOLTAGE BROWNOUT WARNING',
+        description: `PZEM-004T detected mains voltage drop to ${customVoltage}V (< 205V). Compressor motors and power supplies at risk of stalling!`,
+        actionable: true,
+        actionText: 'Diagnose via AI'
+      };
+
+      this.setState({
+        alerts: [newAlert, ...this.state.alerts],
+        telemetry: {
+          ...this.state.telemetry,
+          voltage: customVoltage,
+          currentAmps: brownAmps,
+          totalPowerKw: parseFloat((brownWatts / 1000).toFixed(3)),
+        },
+        singlePlug: {
+          ...this.state.singlePlug,
+          watts: brownWatts,
+        }
+      });
+    } else {
+      const isRelayOn = this.state.singlePlug.relayState === 'ON';
+      const normWatts = isRelayOn ? this.state.singlePlug.baselineWatts : 0;
+      const normAmps = isRelayOn ? parseFloat((normWatts / 230.8).toFixed(2)) : 0;
+
+      const restoredAlert = {
+        id: `alt-uv-res-${Date.now()}`,
+        timestamp: 'Just now',
+        type: 'info',
+        title: '✅ MAINS VOLTAGE RESTORED',
+        description: `Line voltage normalized to 230.8V within safe operational limits.`,
+        actionable: false
+      };
+
+      this.setState({
+        alerts: [restoredAlert, ...this.state.alerts],
+        telemetry: {
+          ...this.state.telemetry,
+          voltage: 230.8,
+          currentAmps: normAmps,
+          totalPowerKw: parseFloat((normWatts / 1000).toFixed(2)),
+        },
+        singlePlug: {
+          ...this.state.singlePlug,
+          watts: normWatts,
+        }
+      });
+    }
+  }
+
   toggleRagModal(isOpen, selectedItem = null) {
     this.setState({ isRagModalOpen: isOpen, selectedKnowledgeItem: selectedItem });
   }

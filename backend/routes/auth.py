@@ -30,6 +30,7 @@ from utils.auth import (
     verify_password_reset_token
 )
 from services.email_service import send_password_reset_email
+from services.telemetry_storage import TelemetryStorageManager
 
 router = APIRouter()
 
@@ -141,6 +142,10 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
         )
 
     token = create_access_token(data={"sub": str(getattr(user, "email")), "user_id": getattr(user, "user_id", getattr(user, "id", None))})
+
+    # Activate this user session for incoming ESP32 live telemetry and storage
+    if getattr(user, "user_id", None):
+        TelemetryStorageManager.set_active_user(user.user_id)
 
     return AuthResponse(
         success=True,

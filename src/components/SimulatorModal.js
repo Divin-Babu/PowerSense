@@ -7,6 +7,7 @@ export function SimulatorModal() {
   if (!state.isSimulatorModalOpen) return '';
 
   const isAnomaly = state.simulatedAnomalyActive;
+  const isLowVoltage = state.telemetry.voltage > 50 && state.telemetry.voltage < 205;
 
   return `
     <div class="fixed inset-0 z-50 bg-background/80 backdrop-blur-md flex items-center justify-center p-grid-margin animate-fadeIn">
@@ -28,7 +29,7 @@ export function SimulatorModal() {
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-sm">
           <div class="p-sm rounded-lg bg-surface-container border border-outline-variant">
             <span class="font-label-sm text-[10px] text-outline block uppercase">Sensor Voltage</span>
-            <span class="font-data-lg text-data-lg text-primary">${state.telemetry.voltage} V</span>
+            <span class="font-data-lg text-data-lg ${isLowVoltage ? 'text-amber-400 font-bold' : 'text-primary'}">${state.telemetry.voltage} V</span>
           </div>
           <div class="p-sm rounded-lg bg-surface-container border border-outline-variant">
             <span class="font-label-sm text-[10px] text-outline block uppercase">Current Draw</span>
@@ -56,6 +57,17 @@ export function SimulatorModal() {
             </div>
             <button id="btn-trigger-anomaly" class="px-md py-sm rounded-lg font-bold font-headline-md text-[13px] ${isAnomaly ? 'bg-error text-on-error hover:bg-error/80' : 'bg-secondary-container text-on-secondary-container hover:bg-secondary-container/80'} transition-all shadow-md">
               ${isAnomaly ? 'Reset Normal State' : 'Inject Surge'}
+            </button>
+          </div>
+
+          <!-- Low Voltage Brownout Injector Button -->
+          <div class="p-md rounded-xl ${isLowVoltage ? 'bg-amber-950/30 border border-amber-500/50' : 'bg-surface-container-high border border-outline-variant'} flex items-center justify-between transition-colors">
+            <div>
+              <p class="font-headline-md text-[15px] text-on-surface">Simulate Low Voltage Brownout</p>
+              <p class="font-body-md text-on-surface-variant text-[13px]">Drops mains to 194.5V (< 205V safe limit) to trigger in-app brownout alerts.</p>
+            </div>
+            <button id="btn-trigger-low-voltage" class="px-md py-sm rounded-lg font-bold font-headline-md text-[13px] ${isLowVoltage ? 'bg-amber-500 text-black hover:bg-amber-400' : 'bg-surface-bright text-on-surface hover:bg-surface-variant'} transition-all shadow-md">
+              ${isLowVoltage ? 'Restore Nominal 230V' : 'Inject Brownout (194V)'}
             </button>
           </div>
 
@@ -97,6 +109,13 @@ export function bindSimulatorModalEvents() {
   if (btnAnomaly) {
     btnAnomaly.addEventListener('click', () => {
       store.triggerSimulatedAnomaly();
+    });
+  }
+
+  const btnLowVoltage = document.getElementById('btn-trigger-low-voltage');
+  if (btnLowVoltage) {
+    btnLowVoltage.addEventListener('click', () => {
+      store.triggerSimulatedLowVoltage();
     });
   }
 

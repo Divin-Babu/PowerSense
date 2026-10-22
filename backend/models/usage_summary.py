@@ -5,6 +5,8 @@ class UsageSummary(Base):
     __tablename__ = 'tbl_usage_summary'
 
     summary_id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey('tbl_user.user_id'), nullable=True)
+    device_id = Column(BigInteger, ForeignKey('tbl_device.device_id'), nullable=True)
     appliance_id = Column(BigInteger, ForeignKey('tbl_appliance.appliance_id'), nullable=True)
     period_type = Column(String(50), nullable=False)  # 'DAY', 'WEEK', 'MONTH', 'YEAR'
     period_start = Column(Date, nullable=False)
@@ -17,6 +19,8 @@ class UsageSummary(Base):
         return {
             "summary_id": self.summary_id,
             "id": self.summary_id,
+            "user_id": self.user_id,
+            "device_id": self.device_id,
             "appliance_id": self.appliance_id,
             "period_type": self.period_type,
             "period_start": self.period_start.isoformat() if self.period_start else None,
