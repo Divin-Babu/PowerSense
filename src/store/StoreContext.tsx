@@ -153,6 +153,10 @@ interface StoreContextType {
   toggleSchedule: (id: string) => void;
   deleteSchedule: (id: string) => void;
   updateSchedule: (id: string, updated: Partial<PlugSchedule>) => void;
+  // Safety Auto-Cutoff
+  autoCutoffEnabled: boolean;
+  toggleAutoCutoff: () => void;
+  setAutoCutoffEnabled: (enabled: boolean) => void;
 }
 
 const StoreContext = createContext<StoreContextType | null>(null);
@@ -167,6 +171,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   });
   const [schedules, setSchedules] = useState<PlugSchedule[]>(DEFAULT_SCHEDULES);
   const [timer, setTimer] = useState<TimerState>(INITIAL_TIMER);
+  const [autoCutoffEnabled, setAutoCutoffEnabledState] = useState<boolean>(true);
   const [inAppToast, setInAppToast] = useState<{
     visible: boolean;
     title: string;
@@ -179,6 +184,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const userEmailRef = useRef<string | undefined>(state.user?.email);
   const voltageAlertStateRef = useRef<'normal' | 'low' | 'high'>('normal');
   const lastVoltageAlertTimeRef = useRef<number>(0);
+  const autoCutoffRef = useRef<boolean>(true);
+  const lastCutoffTriggerRef = useRef<number>(0);
+
+  useEffect(() => {
+    autoCutoffRef.current = autoCutoffEnabled;
+  }, [autoCutoffEnabled]);
 
   useEffect(() => {
     userEmailRef.current = state.user?.email;
@@ -361,6 +372,41 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             }
           }
           const isOnline = Boolean(live && live.connected && live.status === 'ONLINE');
+          const isRelayActive = isOnline && (live.relay_state === 'ON' || live.relay1_state === 'ON');
+          const currentWatts = isOnline ? (live.power_watts !== undefined ? Number(live.power_watts) : Number(((live.power_kw || 0) * 1000).toFixed(1))) : 0;
+
+          // ─── AUTOMATIC RELAY SAFETY CUTOFF (High Power Overload & Dangerous Low Voltage) ───
+          if (autoCutoffRef.current && isRelayActive) {
+            const now = Date.now();
+            const OVERLOAD_WATTS = 1450.0;
+            const CRITICAL_LOW_VOLTS = 185.0;
+            const CRITICAL_HIGH_VOLTS = 255.0;
+
+            if (currentWatts >= OVERLOAD_WATTS || (v !== undefined && v >= CRITICAL_HIGH_VOLTS && currentWatts > 5)) {
+              if (now - lastCutoffTriggerRef.current > 12000) {
+                lastCutoffTriggerRef.current = now;
+                setPlugRelayState('OFF');
+                const triggerReason = currentWatts >= OVERLOAD_WATTS
+                  ? `Load reached ${currentWatts.toFixed(0)}W (≥ ${OVERLOAD_WATTS}W rating)`
+                  : `Line voltage surged to ${v?.toFixed(1)}V`;
+                showInAppNotification(
+                  '🚨 Auto-Cutoff: High Power Trip',
+                  `Relay turned OFF automatically for safety! ${triggerReason}. Connected appliances protected from fire & overload.`,
+                  'critical'
+                );
+              }
+            } else if (v !== undefined && v > 50.0 && v < CRITICAL_LOW_VOLTS) {
+              if (now - lastCutoffTriggerRef.current > 12000) {
+                lastCutoffTriggerRef.current = now;
+                setPlugRelayState('OFF');
+                showInAppNotification(
+                  '⚠️ Auto-Cutoff: Low Voltage Trip',
+                  `Mains dropped to dangerous ${v.toFixed(1)}V (< 185V). Relay turned OFF automatically to protect motor coils from burnouts.`,
+                  'critical'
+                );
+              }
+            }
+          }
 
           setState((prev) => ({
             ...prev,
@@ -408,6 +454,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const savedTheme = g.localStorage.getItem('powersense_theme');
         const savedSession = g.localStorage.getItem('powersense_session');
         const savedSchedules = g.localStorage.getItem('powersense_schedules');
+        const savedAutoCutoff = g.localStorage.getItem('powersense_auto_cutoff');
+
+        if (savedAutoCutoff !== null) {
+          setAutoCutoffEnabledState(savedAutoCutoff === 'true');
+        }
 
         if (savedSchedules) {
           try {
@@ -775,6 +826,36 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     // Standby preset helper
   };
 
+  const toggleAutoCutoff = () => {
+    setAutoCutoffEnabledState((prev) => {
+      const next = !prev;
+      try {
+        const g = globalThis as any;
+        if (typeof g !== 'undefined' && g.localStorage) {
+          g.localStorage.setItem('powersense_auto_cutoff', next ? 'true' : 'false');
+        }
+      } catch (e) {}
+      showInAppNotification(
+        next ? 'Auto-Cutoff Protection Enabled' : 'Auto-Cutoff Protection Paused',
+        next
+          ? 'Smart Plug will automatically trip OFF during severe overload (>1450W) or brownout (<185V).'
+          : 'Warning: Automatic safety relay trip is currently disabled.',
+        next ? 'success' : 'warning'
+      );
+      return next;
+    });
+  };
+
+  const setAutoCutoffEnabled = (enabled: boolean) => {
+    setAutoCutoffEnabledState(enabled);
+    try {
+      const g = globalThis as any;
+      if (typeof g !== 'undefined' && g.localStorage) {
+        g.localStorage.setItem('powersense_auto_cutoff', enabled ? 'true' : 'false');
+      }
+    } catch (e) {}
+  };
+
   const triggerSimulatedAnomaly = () => {
     setState((prev) => {
       if (!prev.simulatedAnomalyActive) {
@@ -787,6 +868,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           actionable: true,
           actionText: 'Diagnose via AI',
         };
+
+        // If Auto-Cutoff is enabled, trip the relay automatically after a short warning delay
+        if (autoCutoffRef.current) {
+          setTimeout(() => {
+            setPlugRelayState('OFF');
+            showInAppNotification(
+              '🚨 Auto-Cutoff: Overpower Trip',
+              'Power draw peaked at 1490W (≥ 1450W). Relay automatically turned OFF for safety! Appliances protected.',
+              'critical'
+            );
+          }, 700);
+        }
+
         return {
           ...prev,
           simulatedAnomalyActive: true,
@@ -827,7 +921,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const simulateLowVoltage = (customVoltage: number = 194.5) => {
+  const simulateLowVoltage = (customVoltage: number = 178.5) => {
     setState((prev) => {
       const isCurrentlyLow = prev.telemetry.voltage > 50 && prev.telemetry.voltage < 205;
       const targetVoltage = isCurrentlyLow ? 230.8 : customVoltage;
@@ -843,6 +937,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           `Mains line voltage dropped to ${targetVoltage}V (< 205V). Brownout conditions active; sensitive equipment at risk!`,
           'warning'
         );
+
+        // If Auto-Cutoff is enabled and voltage is in critical stall territory (< 185V), trip relay
+        if (autoCutoffRef.current && targetVoltage < 185.0 && isRelayOn) {
+          setTimeout(() => {
+            setPlugRelayState('OFF');
+            showInAppNotification(
+              '⚠️ Auto-Cutoff: Low Voltage Trip',
+              `Voltage dropped to dangerous ${targetVoltage}V (< 185V). Relay automatically turned OFF to protect motor coils & compressors!`,
+              'critical'
+            );
+          }, 700);
+        }
       } else {
         voltageAlertStateRef.current = 'normal';
         showInAppNotification(
@@ -1005,6 +1111,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         toggleSchedule,
         deleteSchedule,
         updateSchedule,
+        // Safety Auto-Cutoff
+        autoCutoffEnabled,
+        toggleAutoCutoff,
+        setAutoCutoffEnabled,
       }}
     >
       {children}

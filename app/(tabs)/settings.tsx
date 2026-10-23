@@ -36,11 +36,24 @@ const DEFAULT_DEVICES = [
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { state, togglePlugRelay, logout, isDark, themeColors, toggleTheme, updateUserProfile } = useStore();
+  const {
+    state,
+    togglePlugRelay,
+    logout,
+    isDark,
+    themeColors,
+    toggleTheme,
+    updateUserProfile,
+    autoCutoffEnabled,
+    toggleAutoCutoff,
+    triggerSimulatedAnomaly,
+    simulateLowVoltage,
+  } = useStore();
 
   const [deviceList, setDeviceList] = useState(DEFAULT_DEVICES);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [newDeviceName, setNewDeviceName] = useState('');
+  const [safetyTestFeedback, setSafetyTestFeedback] = useState('');
 
   // Edit Profile & Password Modal State
   const [editProfileModalVisible, setEditProfileModalVisible] = useState(false);
@@ -97,6 +110,26 @@ export default function SettingsScreen() {
   const { singlePlug } = state;
   const isFeaturedRelayOn = singlePlug.relayState === 'ON';
   const featuredWatts = isFeaturedRelayOn ? (singlePlug.watts > 0 ? singlePlug.watts : 215) : 0;
+
+  const runSafetyTest = (type: 'overload' | 'brownout') => {
+    if (!autoCutoffEnabled) {
+      Alert.alert(
+        'Auto-Cutoff Disabled',
+        'Please toggle Automatic Relay Safety Cutoff ON to test the protective hardware shutdown.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    if (type === 'overload') {
+      triggerSimulatedAnomaly();
+      setSafetyTestFeedback('⚡ High Load Overpower test initiated (1,490W)! Auto-cutoff will trip the relay OFF and alert you.');
+      setTimeout(() => setSafetyTestFeedback(''), 5500);
+    } else {
+      simulateLowVoltage(178.5);
+      setSafetyTestFeedback('📉 Low Voltage brownout test initiated (178.5V)! Auto-cutoff will trip the relay OFF and alert you.');
+      setTimeout(() => setSafetyTestFeedback(''), 5500);
+    }
+  };
 
   const handleAddDevice = () => {
     if (!newDeviceName.trim()) {
@@ -279,6 +312,103 @@ export default function SettingsScreen() {
               trackColor={{ false: '#CBD5E1', true: '#00C48C' }}
               thumbColor="#FFFFFF"
             />
+          </View>
+        </View>
+
+        {/* Automatic Relay Safety Cutoff Card */}
+        <Text style={[styles.sectionHeader, { marginTop: 14, color: themeColors.textSecondary }]}>
+          HARDWARE SAFETY & AUTOMATIC RELAY CUTOFF
+        </Text>
+        <View style={[styles.safetyCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
+          <View style={styles.safetyHeaderRow}>
+            <View style={[styles.safetyIconBox, { backgroundColor: autoCutoffEnabled ? (isDark ? 'rgba(0, 196, 140, 0.15)' : '#E8FBF4') : (isDark ? '#2D3748' : '#F1F5F9') }]}>
+              <Ionicons
+                name={autoCutoffEnabled ? 'shield-checkmark' : 'shield-outline'}
+                size={24}
+                color={autoCutoffEnabled ? '#00C48C' : '#94A3B8'}
+              />
+            </View>
+            <View style={styles.safetyTextCol}>
+              <View style={styles.safetyTitleRow}>
+                <Text style={[styles.safetyTitle, { color: themeColors.text }]}>Smart Auto-Cutoff</Text>
+                <View style={[styles.safetyStatusBadge, { backgroundColor: autoCutoffEnabled ? 'rgba(0, 196, 140, 0.14)' : 'rgba(148, 163, 184, 0.14)' }]}>
+                  <View style={[styles.safetyStatusDot, { backgroundColor: autoCutoffEnabled ? '#00C48C' : '#94A3B8' }]} />
+                  <Text style={[styles.safetyStatusText, { color: autoCutoffEnabled ? '#00C48C' : '#94A3B8' }]}>
+                    {autoCutoffEnabled ? 'PROTECTED' : 'DISABLED'}
+                  </Text>
+                </View>
+              </View>
+              <Text style={[styles.safetySub, { color: themeColors.textSecondary }]}>
+                Trips relay OFF automatically when load or voltage reaches unsafe levels
+              </Text>
+            </View>
+            <Switch
+              value={autoCutoffEnabled}
+              onValueChange={toggleAutoCutoff}
+              trackColor={{ false: '#CBD5E1', true: '#00C48C' }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+
+          {/* Threshold Specs Cards */}
+          <View style={styles.safetyThresholdRow}>
+            {/* High Power Threshold */}
+            <View style={[styles.safetyThresholdCard, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder }]}>
+              <View style={styles.thresholdTopRow}>
+                <Ionicons name="flame" size={15} color="#EF4444" />
+                <Text style={styles.thresholdTagHigh}>OVERLOAD CUTOFF</Text>
+              </View>
+              <Text style={[styles.thresholdVal, { color: themeColors.text }]}>≥ 1,450 W</Text>
+              <Text style={[styles.thresholdSub, { color: themeColors.textSecondary }]}>
+                or Surge ≥ 255V • Prevents fire & thermal breakdown
+              </Text>
+            </View>
+
+            {/* Low Voltage / Brownout Threshold */}
+            <View style={[styles.safetyThresholdCard, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder }]}>
+              <View style={styles.thresholdTopRow}>
+                <Ionicons name="flash-off" size={15} color="#F59E0B" />
+                <Text style={styles.thresholdTagLow}>BROWNOUT CUTOFF</Text>
+              </View>
+              <Text style={[styles.thresholdVal, { color: themeColors.text }]}>&lt; 185 V</Text>
+              <Text style={[styles.thresholdSub, { color: themeColors.textSecondary }]}>
+                Under load • Prevents motor & compressor burnout
+              </Text>
+            </View>
+          </View>
+
+          {/* Quick Simulation Testing Area */}
+          <View style={[styles.safetyDiagBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderColor: themeColors.subCardBorder }]}>
+            <View style={styles.diagTitleRow}>
+              <Ionicons name="flask-outline" size={14} color={themeColors.textSecondary} />
+              <Text style={[styles.diagTitle, { color: themeColors.textSecondary }]}>Test Safety Cutoff Mechanism</Text>
+            </View>
+            <View style={styles.diagButtonsRow}>
+              <TouchableOpacity
+                style={[styles.diagBtn, { backgroundColor: 'rgba(239, 68, 68, 0.12)', borderColor: 'rgba(239, 68, 68, 0.3)' }]}
+                onPress={() => runSafetyTest('overload')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="flash" size={13} color="#EF4444" />
+                <Text style={styles.diagBtnTextHigh}>Test High Power (1490W)</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.diagBtn, { backgroundColor: 'rgba(245, 158, 11, 0.12)', borderColor: 'rgba(245, 158, 11, 0.3)' }]}
+                onPress={() => runSafetyTest('brownout')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="arrow-down-circle" size={13} color="#F59E0B" />
+                <Text style={styles.diagBtnTextLow}>Test Brownout (178V)</Text>
+              </TouchableOpacity>
+            </View>
+
+            {safetyTestFeedback ? (
+              <View style={styles.testFeedbackBanner}>
+                <Ionicons name="information-circle" size={14} color="#00C48C" />
+                <Text style={styles.testFeedbackText}>{safetyTestFeedback}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -809,6 +939,158 @@ const styles = StyleSheet.create({
   themeTitle: {
     fontSize: 15,
     fontWeight: '700',
+  },
+
+  // Safety Card & Auto-Cutoff
+  safetyCard: {
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    marginBottom: 16,
+    elevation: 2,
+  },
+  safetyHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  safetyIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  safetyTextCol: {
+    flex: 1,
+  },
+  safetyTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
+  },
+  safetyTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  safetyStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  safetyStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  safetyStatusText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  safetySub: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  safetyThresholdRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  safetyThresholdCard: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  thresholdTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  thresholdTagHigh: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#EF4444',
+    letterSpacing: 0.5,
+  },
+  thresholdTagLow: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#F59E0B',
+    letterSpacing: 0.5,
+  },
+  thresholdVal: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  thresholdSub: {
+    fontSize: 10.5,
+    lineHeight: 14,
+  },
+  safetyDiagBox: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  diagTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  diagTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  diagButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  diagBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  diagBtnTextHigh: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#EF4444',
+  },
+  diagBtnTextLow: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#F59E0B',
+  },
+  testFeedbackBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 196, 140, 0.12)',
+  },
+  testFeedbackText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#00C48C',
+    flex: 1,
   },
 
   // Featured Card

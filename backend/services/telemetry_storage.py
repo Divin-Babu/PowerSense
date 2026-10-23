@@ -122,8 +122,11 @@ class TelemetryStorageManager:
             appliance_id = appliance.appliance_id if appliance else None
 
             # ─────────────────────────────────────────────────────────────────
+            # ─────────────────────────────────────────────────────────────────
             # 2. INSTANTANEOUS LIVE ANOMALY & SAFETY SENSING (Evaluated Every 1s)
             # ─────────────────────────────────────────────────────────────────
+            ist_now = get_ist_now().replace(tzinfo=None)
+
             # A. Overload Peak Sensing
             if power_w >= cls.OVERLOAD_WATTS_THRESHOLD:
                 anomaly = Anomaly(
@@ -133,7 +136,7 @@ class TelemetryStorageManager:
                     anomaly_type="High Power Usage",
                     severity="critical",
                     description=f"Power draw peaked at {power_w:.1f}W (> {cls.OVERLOAD_WATTS_THRESHOLD}W rating).",
-                    detected_at=datetime.utcnow()
+                    detected_at=ist_now
                 )
                 db.add(anomaly)
                 notif = Notification(
@@ -143,7 +146,7 @@ class TelemetryStorageManager:
                     notification_type="critical",
                     message=f"High Power Usage: Load exceeded {power_w:.1f}W on {device.device_name}.",
                     status="UNREAD",
-                    created_at=datetime.utcnow()
+                    created_at=ist_now
                 )
                 db.add(notif)
                 db.commit()
@@ -160,7 +163,7 @@ class TelemetryStorageManager:
                         anomaly_type="Low Voltage",
                         severity="warning",
                         description=f"Low mains voltage detected: {voltage:.1f}V (< {cls.UNDERVOLTAGE_THRESHOLD}V). Brownout conditions may damage compressor motors or power supplies.",
-                        detected_at=datetime.utcnow()
+                        detected_at=ist_now
                     )
                     db.add(anomaly)
                     notif = Notification(
@@ -170,7 +173,7 @@ class TelemetryStorageManager:
                         notification_type="warning",
                         message=f"Low Voltage Warning: Mains dropped to {voltage:.1f}V on {device.device_name}. Sensitive appliances may experience brownout stress.",
                         status="UNREAD",
-                        created_at=datetime.utcnow()
+                        created_at=ist_now
                     )
                     db.add(notif)
                     db.commit()
@@ -187,7 +190,7 @@ class TelemetryStorageManager:
                         anomaly_type="High Voltage",
                         severity="critical",
                         description=f"Overvoltage surge detected: {voltage:.1f}V (>= {cls.OVERVOLTAGE_THRESHOLD}V). Risk of appliance component breakdown.",
-                        detected_at=datetime.utcnow()
+                        detected_at=ist_now
                     )
                     db.add(anomaly)
                     notif = Notification(
@@ -197,10 +200,47 @@ class TelemetryStorageManager:
                         notification_type="critical",
                         message=f"Overvoltage Alert: Voltage spiked to {voltage:.1f}V on {device.device_name}. Disconnect load immediately.",
                         status="UNREAD",
-                        created_at=datetime.utcnow()
+                        created_at=ist_now
                     )
                     db.add(notif)
                     db.commit()
+
+            # ─────────────────────────────────────────────────────────────────
+            # D. AUTOMATIC RELAY SAFETY CUTOFF (High Power Overload or Low Voltage)
+            # ─────────────────────────────────────────────────────────────────
+            is_overpower = power_w >= cls.OVERLOAD_WATTS_THRESHOLD or (voltage >= 255.0 and power_w > 5.0)
+            is_critical_low_v = cls.MIN_OPERATING_VOLTAGE < voltage < 185.0 and (power_w > 10.0 or relay_state == "ON")
+
+            if (is_overpower or is_critical_low_v) and (relay_state == "ON" or (device and device.relay_state == "ON")):
+                device.relay_state = "OFF"
+                device.relay1_state = "OFF"
+                device.relay2_state = "OFF"
+                db.commit()
+
+                try:
+                    from routes.telemetry import LATEST_TELEMETRY, CONNECTED_DEVICES
+                    LATEST_TELEMETRY["relay_state"] = "OFF"
+                    LATEST_TELEMETRY["relay1_state"] = "OFF"
+                    LATEST_TELEMETRY["relay2_state"] = "OFF"
+                    if device_uid in CONNECTED_DEVICES:
+                        CONNECTED_DEVICES[device_uid]["relay_state"] = "OFF"
+                        CONNECTED_DEVICES[device_uid]["relay1_state"] = "OFF"
+                        CONNECTED_DEVICES[device_uid]["relay2_state"] = "OFF"
+                except Exception:
+                    pass
+
+                reason_text = f"Power Overload ({power_w:.1f}W ≥ {cls.OVERLOAD_WATTS_THRESHOLD}W)" if is_overpower else f"Dangerous Low Voltage ({voltage:.1f}V < 185V)"
+                cutoff_notif = Notification(
+                    user_id=active_uid,
+                    device_id=device.device_id,
+                    appliance_id=appliance_id,
+                    notification_type="critical",
+                    message=f"🚨 Auto-Cutoff Triggered: Smart plug relay turned OFF automatically due to {reason_text}. Equipment protected.",
+                    status="UNREAD",
+                    created_at=ist_now
+                )
+                db.add(cutoff_notif)
+                db.commit()
 
             # ─────────────────────────────────────────────────────────────────
             # 3. TIME-WINDOW BUFFERING & PERIODIC AVERAGING FOR tbl_energy_reading
