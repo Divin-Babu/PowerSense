@@ -20,7 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Circle, Rect, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
 import { useStore } from '../../src/store/StoreContext';
-import { fetchDashboardData } from '../../src/services/api';
+import { fetchDashboardData, updateMonthlyGoalApi, fetchDailyBillHistory } from '../../src/services/api';
 
 const DEFAULT_HOURLY_BARS = [
   { time: '00:00', val: 0.0 },
@@ -39,6 +39,7 @@ const DEFAULT_HOURLY_BARS = [
 ];
 
 const TIMER_PRESETS = [15, 30, 45, 60, 120, 180];
+const GOAL_PRESETS = [50, 100, 150, 200, 250, 300, 500];
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -59,14 +60,23 @@ export default function DashboardScreen() {
     addSchedule,
     toggleSchedule,
     deleteSchedule,
+    showInAppNotification,
   } = useStore();
 
   const [hourlyBars, setHourlyBars] = useState(DEFAULT_HOURLY_BARS);
   const [selectedBar, setSelectedBar] = useState<number | null>(Math.min(12, Math.floor(new Date().getHours() / 2)));
-  const [activeModal, setActiveModal] = useState<'schedule' | 'timer' | 'hardware' | null>(null);
+  const [activeModal, setActiveModal] = useState<'schedule' | 'timer' | 'hardware' | 'goal' | 'bill' | null>(null);
   const [billAmount, setBillAmount] = useState('0.00');
+  const [activeTariffRate, setActiveTariffRate] = useState('6.50');
   const [monthKwh, setMonthKwh] = useState('0.000');
   const [monthGoalPct, setMonthGoalPct] = useState('0%');
+  const [monthGoalKwh, setMonthGoalKwh] = useState(100);
+  const [monthRemainingKwh, setMonthRemainingKwh] = useState(100);
+  const [monthDaysLeft, setMonthDaysLeft] = useState(9);
+  const [monthProjectedCost, setMonthProjectedCost] = useState(0);
+  const [dailyBillHistory, setDailyBillHistory] = useState<any[]>([]);
+  const [customGoalInput, setCustomGoalInput] = useState('100');
+  const [isSavingGoal, setIsSavingGoal] = useState(false);
   const [liveHistory, setLiveHistory] = useState<number[]>([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 
   // Push new live telemetry points to the live waveform buffer
@@ -99,9 +109,27 @@ export default function DashboardScreen() {
           if (data.bill_estimate?.amount !== undefined) {
             setBillAmount(Number(data.bill_estimate.amount).toFixed(2));
           }
+          if (data.bill_estimate?.rate_per_kwh !== undefined) {
+            setActiveTariffRate(Number(data.bill_estimate.rate_per_kwh).toFixed(2));
+          }
+          if (data.bill_estimate?.daily_history && Array.isArray(data.bill_estimate.daily_history)) {
+            setDailyBillHistory(data.bill_estimate.daily_history);
+          }
           if (data.this_month?.kwh !== undefined) {
             setMonthKwh(Number(data.this_month.kwh).toFixed(3));
             setMonthGoalPct(`${data.this_month.goal_pct || 0}%`);
+            if (data.this_month.goal_kwh !== undefined) {
+              setMonthGoalKwh(data.this_month.goal_kwh);
+            }
+            if (data.this_month.remaining_kwh !== undefined) {
+              setMonthRemainingKwh(data.this_month.remaining_kwh);
+            }
+            if (data.this_month.days_left !== undefined) {
+              setMonthDaysLeft(data.this_month.days_left);
+            }
+            if (data.this_month.projected_cost !== undefined) {
+              setMonthProjectedCost(data.this_month.projected_cost);
+            }
           }
         }
       } catch (e) { }
@@ -174,6 +202,34 @@ export default function DashboardScreen() {
     setNewScheduleName('');
     setIsAddingSchedule(false);
     Alert.alert('Schedule Saved', `Automation schedule '${newScheduleName.trim()}' is now active.`);
+  };
+
+  // Handle Monthly Goal Update
+  const handleSaveGoal = async () => {
+    const val = parseFloat(customGoalInput);
+    if (isNaN(val) || val <= 0) {
+      Alert.alert('Invalid Target', 'Please enter a valid energy goal in kWh.');
+      return;
+    }
+    setIsSavingGoal(true);
+    try {
+      const res = await updateMonthlyGoalApi(val, state.user?.email);
+      if (res && res.success) {
+        setMonthGoalKwh(res.goal_kwh || val);
+        const used = parseFloat(monthKwh) || 0;
+        const newPct = Math.min(999, Math.round((used / val) * 100));
+        setMonthGoalPct(`${newPct}%`);
+        setMonthRemainingKwh(Math.max(0, val - used));
+        showInAppNotification('Monthly Goal Saved', `Target set to ${val} kWh for ${state.user?.email || 'account'}.`, 'success');
+        setActiveModal(null);
+      } else {
+        showInAppNotification('Goal Update Failed', res?.message || 'Could not update energy goal.', 'warning');
+      }
+    } catch (e: any) {
+      showInAppNotification('Error', e.message || 'Failed to update goal', 'critical');
+    } finally {
+      setIsSavingGoal(false);
+    }
   };
 
   return (
@@ -618,49 +674,109 @@ export default function DashboardScreen() {
         {/* Row with 2 Cards: This Month & Estimated Bill */}
         <View style={styles.twoCardsRow}>
           {/* This Month Goal Card */}
-          <View style={[styles.halfCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
-            <Text style={[styles.halfCardLabel, { color: themeColors.textSecondary }]}>This Month</Text>
-            <Text style={[styles.halfCardValue, { color: themeColors.text }]}>
-              {monthKwh} <Text style={[styles.halfCardUnit, { color: themeColors.textSecondary }]}>kWh</Text>
-            </Text>
+          {(() => {
+            const goalUsedKwh = parseFloat(monthKwh) || 0;
+            const goalTargetKwh = monthGoalKwh > 0 ? monthGoalKwh : 100;
+            const goalUsageRatio = goalUsedKwh / goalTargetKwh;
+            const clampedRatio = Math.min(1.0, Math.max(0.0, goalUsageRatio));
+            const arcLength = 126; // pi * radius(40) = 125.66
+            const arcOffset = arcLength * (1.0 - clampedRatio);
+            const isGoalCritical = goalUsageRatio >= 0.90;
+            const isGoalWarning = goalUsageRatio >= 0.70 && goalUsageRatio < 0.90;
+            const statusColor = isGoalCritical ? '#EF4444' : isGoalWarning ? '#F59E0B' : '#00C48C';
+            const iconName = isGoalCritical ? 'warning' : isGoalWarning ? 'alert-circle' : 'shield-checkmark';
 
-            {/* Circular Gauge Visual */}
-            <View style={styles.gaugeWrapper}>
-              <Svg width="110" height="65" viewBox="0 0 110 65">
-                <Defs>
-                  <SvgGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="0">
-                    <Stop offset="0%" stopColor="#00D589" />
-                    <Stop offset="100%" stopColor="#3B82F6" />
-                  </SvgGradient>
-                </Defs>
-                <Path
-                  d="M 15 55 A 40 40 0 0 1 95 55"
-                  fill="none"
-                  stroke={isDark ? '#334155' : '#E2E8F0'}
-                  strokeWidth="10"
-                  strokeLinecap="round"
-                />
-                <Path
-                  d="M 15 55 A 40 40 0 0 1 80 20"
-                  fill="none"
-                  stroke="url(#gaugeGrad)"
-                  strokeWidth="10"
-                  strokeLinecap="round"
-                />
-              </Svg>
-              <View style={styles.gaugeCenterIcon}>
-                <Ionicons name="shield-checkmark" size={16} color="#00C48C" />
+            return (
+              <TouchableOpacity
+                style={[styles.halfCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}
+                onPress={() => {
+                  setCustomGoalInput(String(monthGoalKwh));
+                  setActiveModal('goal');
+                }}
+                activeOpacity={0.82}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={[styles.halfCardLabel, { color: themeColors.textSecondary }]}>Monthly Goal</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                    <Ionicons name="create-outline" size={12} color="#00C48C" />
+                    <Text style={{ fontSize: 10, color: '#00C48C', fontWeight: '700' }}>Edit</Text>
+                  </View>
+                </View>
+
+                <Text style={[styles.halfCardValue, { color: themeColors.text }]}>
+                  {monthKwh} <Text style={[styles.halfCardUnit, { color: themeColors.textSecondary }]}>kWh</Text>
+                </Text>
+
+                {/* Dynamic Circular Gauge Visual */}
+                <View style={styles.gaugeWrapper}>
+                  <Svg width="110" height="65" viewBox="0 0 110 65">
+                    <Defs>
+                      <SvgGradient id="gaugeGradNormal" x1="0" y1="0" x2="1" y2="0">
+                        <Stop offset="0%" stopColor="#00D589" />
+                        <Stop offset="100%" stopColor="#3B82F6" />
+                      </SvgGradient>
+                      <SvgGradient id="gaugeGradWarning" x1="0" y1="0" x2="1" y2="0">
+                        <Stop offset="0%" stopColor="#F59E0B" />
+                        <Stop offset="100%" stopColor="#F97316" />
+                      </SvgGradient>
+                      <SvgGradient id="gaugeGradCritical" x1="0" y1="0" x2="1" y2="0">
+                        <Stop offset="0%" stopColor="#EF4444" />
+                        <Stop offset="100%" stopColor="#DC2626" />
+                      </SvgGradient>
+                    </Defs>
+                    {/* Background Arc */}
+                    <Path
+                      d="M 15 55 A 40 40 0 0 1 95 55"
+                      fill="none"
+                      stroke={isDark ? '#334155' : '#E2E8F0'}
+                      strokeWidth="10"
+                      strokeLinecap="round"
+                    />
+                    {/* Dynamic Foreground Arc */}
+                    <Path
+                      d="M 15 55 A 40 40 0 0 1 95 55"
+                      fill="none"
+                      stroke={isGoalCritical ? 'url(#gaugeGradCritical)' : isGoalWarning ? 'url(#gaugeGradWarning)' : 'url(#gaugeGradNormal)'}
+                      strokeWidth="10"
+                      strokeLinecap="round"
+                      strokeDasharray="126"
+                      strokeDashoffset={arcOffset}
+                    />
+                  </Svg>
+                  <View style={styles.gaugeCenterIcon}>
+                    <Ionicons name={iconName} size={16} color={statusColor} />
+                  </View>
+                </View>
+
+                <Text style={[styles.gaugeFooterText, { color: themeColors.textSecondary }]}>
+                  Goal: <Text style={{ color: statusColor, fontWeight: '700' }}>{monthGoalPct}</Text> of {monthGoalKwh}k
+                </Text>
+              </TouchableOpacity>
+            );
+          })()}
+
+          {/* Estimated Bill Card */}
+          <TouchableOpacity
+            style={[styles.halfCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}
+            onPress={async () => {
+              setActiveModal('bill');
+              try {
+                const res: any = await fetchDailyBillHistory(state.user?.email);
+                if (res?.history && Array.isArray(res.history)) {
+                  setDailyBillHistory(res.history);
+                }
+              } catch (e) {}
+            }}
+            activeOpacity={0.82}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={[styles.halfCardLabel, { color: themeColors.textSecondary }]}>Estimated Bill</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                <Ionicons name="calendar-outline" size={12} color="#00C48C" />
+                <Text style={{ fontSize: 10, color: '#00C48C', fontWeight: '700' }}>Daily</Text>
               </View>
             </View>
 
-            <Text style={[styles.gaugeFooterText, { color: themeColors.textSecondary }]}>
-              Goal: <Text style={{ color: '#00C48C', fontWeight: '700' }}>{monthGoalPct}</Text> used
-            </Text>
-          </View>
-
-          {/* Estimated Bill Card */}
-          <View style={[styles.halfCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
-            <Text style={[styles.halfCardLabel, { color: themeColors.textSecondary }]}>Estimated Bill</Text>
             <Text style={[styles.halfCardValue, { color: themeColors.text }]}>₹ {billAmount}</Text>
             <Text style={[styles.billDueText, { color: themeColors.textMuted }]}>Based on active tariffs</Text>
 
@@ -682,9 +798,9 @@ export default function DashboardScreen() {
             </View>
 
             <Text style={[styles.gaugeFooterText, { color: themeColors.textSecondary }]}>
-              Rate: <Text style={{ color: '#00C48C', fontWeight: '700' }}>₹6.50/kWh</Text>
+              Rate: <Text style={{ color: '#00C48C', fontWeight: '700' }}>₹{activeTariffRate}/kWh</Text>
             </Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* Quick Insights Banner */}
@@ -1202,6 +1318,307 @@ export default function DashboardScreen() {
               {/* Close Button */}
               <TouchableOpacity
                 style={styles.closeHwBtn}
+                onPress={() => setActiveModal(null)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.closeHwBtnText}>Done</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── MODAL 4: MONTHLY GOAL & DETAILS ─── */}
+      <Modal visible={activeModal === 'goal'} transparent animationType="slide" onRequestClose={() => setActiveModal(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={styles.modalIconBadge}>
+                  <Ionicons name="flag" size={20} color="#00C48C" />
+                </View>
+                <View>
+                  <Text style={[styles.modalTitle, { color: themeColors.text }]}>Monthly Energy Target</Text>
+                  <Text style={{ fontSize: 11, color: themeColors.textSecondary }}>Set & Track Monthly Goal Details</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => setActiveModal(null)} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={22} color={themeColors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
+              {/* Target Overview Card */}
+              <View style={[styles.goalOverviewHero, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder }]}>
+                <View style={styles.goalMetricsGrid}>
+                  <View style={styles.goalMetricItem}>
+                    <Text style={[styles.goalMetricLabel, { color: themeColors.textSecondary }]}>TARGET</Text>
+                    <Text style={[styles.goalMetricVal, { color: '#00C48C' }]}>{monthGoalKwh} <Text style={{ fontSize: 12 }}>kWh</Text></Text>
+                  </View>
+                  <View style={styles.goalMetricDivider} />
+                  <View style={styles.goalMetricItem}>
+                    <Text style={[styles.goalMetricLabel, { color: themeColors.textSecondary }]}>CONSUMED</Text>
+                    <Text style={[styles.goalMetricVal, { color: themeColors.text }]}>{monthKwh} <Text style={{ fontSize: 12 }}>kWh</Text></Text>
+                  </View>
+                  <View style={styles.goalMetricDivider} />
+                  <View style={styles.goalMetricItem}>
+                    <Text style={[styles.goalMetricLabel, { color: themeColors.textSecondary }]}>REMAINING</Text>
+                    <Text style={[styles.goalMetricVal, { color: monthRemainingKwh <= 10 ? '#EF4444' : '#3B82F6' }]}>{monthRemainingKwh.toFixed(1)} <Text style={{ fontSize: 12 }}>kWh</Text></Text>
+                  </View>
+                </View>
+
+                {/* Sub row with days left and projected cost */}
+                <View style={[styles.goalSubRow, { borderTopColor: themeColors.cardBorder }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="calendar-outline" size={14} color={themeColors.textSecondary} />
+                    <Text style={[styles.goalSubText, { color: themeColors.textSecondary }]}>
+                      {monthDaysLeft} Days Remaining
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="trending-up-outline" size={14} color="#00C48C" />
+                    <Text style={[styles.goalSubText, { color: themeColors.textSecondary }]}>
+                      Projected: <Text style={{ color: '#00C48C', fontWeight: '700' }}>₹{monthProjectedCost.toFixed(2)}</Text>
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Presets Grid */}
+              <Text style={[styles.modalInputLabel, { color: themeColors.textSecondary, marginTop: 16 }]}>QUICK PRESETS (KWH):</Text>
+              <View style={styles.presetPillsGrid}>
+                {GOAL_PRESETS.map((preset) => (
+                  <TouchableOpacity
+                    key={preset}
+                    style={[
+                      styles.presetPill,
+                      Number(customGoalInput) === preset && styles.presetPillActive,
+                      {
+                        backgroundColor: Number(customGoalInput) === preset ? '#00C48C' : themeColors.subCardBg,
+                        borderColor: Number(customGoalInput) === preset ? '#00C48C' : themeColors.subCardBorder,
+                      },
+                    ]}
+                    onPress={() => setCustomGoalInput(String(preset))}
+                  >
+                    <Text
+                      style={[
+                        styles.presetPillText,
+                        { color: Number(customGoalInput) === preset ? '#FFFFFF' : themeColors.text },
+                      ]}
+                    >
+                      {preset} kWh
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Custom Target Input & Stepper */}
+              <Text style={[styles.modalInputLabel, { color: themeColors.textSecondary, marginTop: 14 }]}>CUSTOM TARGET (KWH):</Text>
+              <View style={[styles.stepperContainer, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder }]}>
+                <TouchableOpacity
+                  style={styles.stepperBtn}
+                  onPress={() => {
+                    const current = parseFloat(customGoalInput) || 100;
+                    setCustomGoalInput(String(Math.max(10, current - 10)));
+                  }}
+                >
+                  <Ionicons name="remove" size={20} color={themeColors.text} />
+                </TouchableOpacity>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+                  <TextInput
+                    style={[styles.goalNumberInput, { color: themeColors.text }]}
+                    keyboardType="numeric"
+                    value={customGoalInput}
+                    onChangeText={setCustomGoalInput}
+                    placeholder="100"
+                    placeholderTextColor={themeColors.textMuted}
+                    textAlign="center"
+                  />
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: themeColors.textSecondary, marginLeft: 4 }}>kWh</Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.stepperBtn}
+                  onPress={() => {
+                    const current = parseFloat(customGoalInput) || 100;
+                    setCustomGoalInput(String(Math.min(2000, current + 10)));
+                  }}
+                >
+                  <Ionicons name="add" size={20} color={themeColors.text} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Save Button */}
+              <TouchableOpacity
+                style={[styles.modalPrimaryBtn, { marginTop: 18, opacity: isSavingGoal ? 0.7 : 1 }]}
+                onPress={handleSaveGoal}
+                disabled={isSavingGoal}
+                activeOpacity={0.88}
+              >
+                <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
+                <Text style={styles.modalPrimaryBtnText}>
+                  {isSavingGoal ? 'Saving to Database...' : 'Save Energy Target'}
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ─── MODAL 5: ESTIMATED BILL & DAILY BREAKDOWN ─── */}
+      <Modal visible={activeModal === 'bill'} transparent animationType="slide" onRequestClose={() => setActiveModal(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCardLarge, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder, maxHeight: '88%' }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={styles.modalIconBadge}>
+                  <Ionicons name="receipt" size={20} color="#00C48C" />
+                </View>
+                <View>
+                  <Text style={[styles.modalTitle, { color: themeColors.text }]}>Estimated Bill & Daily Breakdown</Text>
+                  <Text style={{ fontSize: 11, color: themeColors.textSecondary }}>Live Usage & Cost for Each Day</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => setActiveModal(null)} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={22} color={themeColors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+              {/* Summary Hero */}
+              <LinearGradient
+                colors={['#00D589', '#009E69']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.billHeroCard}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <View>
+                    <Text style={styles.billHeroSubtitle}>TOTAL ESTIMATED MONTH SPEND</Text>
+                    <Text style={styles.billHeroAmount}>₹ {billAmount}</Text>
+                  </View>
+                  <View style={styles.billHeroRateBadge}>
+                    <Text style={styles.billHeroRateText}>₹{activeTariffRate} / kWh</Text>
+                  </View>
+                </View>
+
+                <View style={styles.billHeroFooterRow}>
+                  <Text style={styles.billHeroFooterText}>
+                    Month Consumption: <Text style={{ fontWeight: '800' }}>{monthKwh} kWh</Text>
+                  </Text>
+                  <Text style={styles.billHeroFooterText}>
+                    Active Tariff: <Text style={{ fontWeight: '800' }}>Standard Domestic</Text>
+                  </Text>
+                </View>
+              </LinearGradient>
+
+              {/* Daily Breakdown List */}
+              <View style={{ marginTop: 18, marginBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={[styles.hwSectionTitle, { color: themeColors.text, marginBottom: 0 }]}>
+                  📅 DAILY USAGE & CHARGES (LAST 14 DAYS)
+                </Text>
+                <Text style={{ fontSize: 11, color: themeColors.textSecondary }}>
+                  {dailyBillHistory.length} Days Recorded
+                </Text>
+              </View>
+
+              {dailyBillHistory && dailyBillHistory.length > 0 ? (
+                dailyBillHistory.map((dayItem, idx) => {
+                  const maxDayCost = Math.max(...dailyBillHistory.map((d: any) => d.cost || 0), 1);
+                  const barWidthPct = Math.min(100, Math.max(8, Math.round(((dayItem.cost || 0) / maxDayCost) * 100)));
+
+                  return (
+                    <View
+                      key={dayItem.date || idx}
+                      style={[
+                        styles.dailyBillItem,
+                        {
+                          backgroundColor: dayItem.is_today
+                            ? (isDark ? 'rgba(0, 213, 137, 0.12)' : '#E8FBF4')
+                            : themeColors.subCardBg,
+                          borderColor: dayItem.is_today ? '#00C48C' : themeColors.subCardBorder,
+                        },
+                      ]}
+                    >
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                          <View
+                            style={[
+                              styles.dailyCalendarBadge,
+                              { backgroundColor: dayItem.is_today ? '#00C48C' : (isDark ? '#334155' : '#E2E8F0') },
+                            ]}
+                          >
+                            <Ionicons
+                              name={dayItem.is_today ? 'flash' : 'calendar'}
+                              size={14}
+                              color={dayItem.is_today ? '#FFFFFF' : themeColors.textSecondary}
+                            />
+                          </View>
+                          <View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              <Text style={[styles.dailyDateTitle, { color: themeColors.text }]}>
+                                {dayItem.date_label || dayItem.date}
+                              </Text>
+                              {dayItem.is_today && (
+                                <View style={styles.todayPillBadge}>
+                                  <Text style={styles.todayPillText}>TODAY</Text>
+                                </View>
+                              )}
+                            </View>
+                            <Text style={[styles.dailyKwhSub, { color: themeColors.textSecondary }]}>
+                              {Number(dayItem.kwh || 0).toFixed(3)} kWh consumed
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Price Display */}
+                        <View style={{ alignItems: 'flex-end' }}>
+                          <Text style={[styles.dailyPriceTitle, { color: dayItem.cost > 0 ? '#00C48C' : themeColors.textSecondary }]}>
+                            ₹ {Number(dayItem.cost || 0).toFixed(2)}
+                          </Text>
+                          <Text style={[styles.dailyRateSub, { color: themeColors.textMuted }]}>
+                            @ ₹{dayItem.rate || activeTariffRate}/u
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Mini Usage Bar */}
+                      <View style={[styles.dailyBarTrack, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0' }]}>
+                        <View
+                          style={[
+                            styles.dailyBarFill,
+                            {
+                              width: `${barWidthPct}%`,
+                              backgroundColor: dayItem.is_today ? '#00C48C' : (isDark ? '#3B82F6' : '#60A5FA'),
+                            },
+                          ]}
+                        />
+                      </View>
+                    </View>
+                  );
+                })
+              ) : (
+                <View style={[styles.emptySchedulesBox, { paddingVertical: 32 }]}>
+                  <Ionicons name="receipt-outline" size={36} color={themeColors.textMuted} />
+                  <Text style={[styles.emptySchedulesTitle, { color: themeColors.text }]}>Loading Telemetry History...</Text>
+                  <Text style={[styles.emptySchedulesSub, { color: themeColors.textSecondary }]}>
+                    Fetching real-time energy records from tbl_energy_reading for your account.
+                  </Text>
+                </View>
+              )}
+
+              {/* Bottom Notice */}
+              <View style={[styles.dailyNoticeBox, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder }]}>
+                <Ionicons name="information-circle-outline" size={16} color="#00C48C" />
+                <Text style={[styles.dailyNoticeText, { color: themeColors.textSecondary }]}>
+                  All calculations are computed dynamically using your active electricity tariff rates and real-time PZEM-004T sensor telemetry saved directly in PostgreSQL.
+                </Text>
+              </View>
+
+              {/* Done Button */}
+              <TouchableOpacity
+                style={[styles.closeHwBtn, { marginTop: 14 }]}
                 onPress={() => setActiveModal(null)}
                 activeOpacity={0.85}
               >
@@ -2233,4 +2650,166 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 15,
   },
+  goalOverviewHero: {
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginTop: 6,
+  },
+  goalMetricsGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingVertical: 4,
+  },
+  goalMetricItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  goalMetricLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  goalMetricVal: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  goalMetricDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: '#CBD5E1',
+    opacity: 0.4,
+  },
+  goalSubRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    paddingTop: 12,
+    marginTop: 12,
+  },
+  goalSubText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  goalNumberInput: {
+    fontSize: 26,
+    fontWeight: '900',
+    minWidth: 80,
+    paddingVertical: 2,
+  },
+  billHeroCard: {
+    padding: 18,
+    borderRadius: 18,
+    marginTop: 6,
+    shadowColor: '#00D589',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  billHeroSubtitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.85)',
+    letterSpacing: 0.5,
+  },
+  billHeroAmount: {
+    fontSize: 30,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    marginTop: 3,
+  },
+  billHeroRateBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  billHeroRateText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  billHeroFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.25)',
+    paddingTop: 10,
+    marginTop: 12,
+  },
+  billHeroFooterText: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.92)',
+  },
+  dailyBillItem: {
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  dailyCalendarBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dailyDateTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  todayPillBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: '#00C48C',
+  },
+  todayPillText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  dailyKwhSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  dailyPriceTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  dailyRateSub: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  dailyBarTrack: {
+    height: 5,
+    borderRadius: 3,
+    marginTop: 10,
+    overflow: 'hidden',
+  },
+  dailyBarFill: {
+    height: 5,
+    borderRadius: 3,
+  },
+  dailyNoticeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 6,
+  },
+  dailyNoticeText: {
+    fontSize: 11,
+    flex: 1,
+    lineHeight: 16,
+  },
 });
+

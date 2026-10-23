@@ -619,6 +619,35 @@ export async function fetchAnalyticsData(period = 'day', email, offset = 0) {
   }
 }
 
+export async function updateMonthlyGoalApi(goalKwh, email) {
+  try {
+    const res = await fetch(`${getDataUrl()}/goal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        goal_kwh: Number(goalKwh),
+        email,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to update monthly goal');
+    return data;
+  } catch (e) {
+    return { success: false, message: e.message };
+  }
+}
+
+export async function fetchDailyBillHistory(email) {
+  try {
+    const query = email ? `?email=${encodeURIComponent(email)}` : '';
+    const res = await fetchWithTimeout(`${getDataUrl()}/bill/daily${query}`);
+    if (!res.ok) throw new Error('Failed to fetch daily bill history');
+    return await res.json();
+  } catch (e) {
+    return { success: false, history: [] };
+  }
+}
+
 export async function fetchDevicesData(email) {
   try {
     const query = email ? `?email=${encodeURIComponent(email)}` : '';

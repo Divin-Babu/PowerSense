@@ -1,6 +1,6 @@
 import time
 import math
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
@@ -299,14 +299,16 @@ def toggle_esp32_relay(cmd: RelayCommand):
             db_s.commit()
 
         app = db_s.query(Appliance).first()
+        active_uid = TelemetryStorageManager.get_active_user_id() or 2
+        ist_now = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=5, minutes=30))).replace(tzinfo=None)
         notif = Notification(
-            user_id=None,
+            user_id=active_uid,
             device_id=dev.device_id if dev else 1,
             appliance_id=app.appliance_id if app else None,
             notification_type="info",
             message=f"Relay Switched: Smart Plug relay turned {target_state} ({target_channel}).",
             status="UNREAD",
-            created_at=datetime.utcnow()
+            created_at=ist_now
         )
         db_s.add(notif)
         db_s.commit()

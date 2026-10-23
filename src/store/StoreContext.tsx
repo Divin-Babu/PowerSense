@@ -14,6 +14,7 @@ import {
   updateUserSchedule,
   deleteUserSchedule,
 } from '../services/api';
+import { setupSystemNotifications, triggerSystemNotification } from '../services/notificationService';
 
 // ─── Default Smart Schedules & Timer Initial ──────────────────────────────────
 
@@ -183,6 +184,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     userEmailRef.current = state.user?.email;
   }, [state.user?.email]);
 
+  useEffect(() => {
+    setupSystemNotifications().catch(() => {});
+  }, []);
+
   const showInAppNotification = (title: string, message?: string, type: 'info' | 'success' | 'warning' | 'critical' = 'info') => {
     setInAppToast({ visible: true, title, message, type });
     const newAlert: AlertItem = {
@@ -199,6 +204,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       title,
       message,
       notification_type: type
+    }).catch(() => {});
+
+    // Native heads-up mobile notification in status bar across all apps
+    triggerSystemNotification({
+      title,
+      message: message || title,
+      type: type === 'critical' ? 'alert' : type === 'warning' ? 'warning' : 'info',
     }).catch(() => {});
   };
 

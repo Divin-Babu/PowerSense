@@ -114,7 +114,12 @@ export default function AlertsScreen() {
     isStoreAlert: true,
   }));
 
-  const allCombinedAlerts = [...storeAlertsMapped, ...apiAlerts];
+  // Cleanly merge live store alerts with backend API notifications avoiding duplicate entries
+  const existingKeys = new Set(apiAlerts.map((a) => `${a.title}_${a.description}`));
+  const uniqueStoreAlerts = storeAlertsMapped.filter(
+    (sa) => !existingKeys.has(`${sa.title}_${sa.description}`)
+  );
+  const allCombinedAlerts = [...uniqueStoreAlerts, ...apiAlerts];
   const filteredAlerts = allCombinedAlerts.filter((item) => {
     if (activeFilter === 'all') return true;
     if (activeFilter === 'critical') return item.category === 'critical' || item.category === 'warning';

@@ -164,6 +164,49 @@ def get_dashboard_summary(
                 val = 0.0
         hourly_bars.append({"time": t, "val": val})
 
+    import calendar
+    _, days_in_month = calendar.monthrange(now_ist.year, now_ist.month)
+    days_left = max(0, days_in_month - now_ist.day)
+    remaining_kwh = max(0.0, round(user_goal_kwh - user_month_kwh, 2))
+
+    # 5. Daily Usage and Cost Breakdown for Estimated Bill (Last 14 days)
+    daily_history = []
+    for past_idx in range(14):
+        hist_date = now_ist.date() - timedelta(days=past_idx)
+        h_start = datetime.combine(hist_date, datetime.min.time())
+        h_end = datetime.combine(hist_date, datetime.max.time())
+        h_readings = db.query(EnergyReading).filter(
+            EnergyReading.user_id == u_id,
+            EnergyReading.recorded_at >= h_start,
+            EnergyReading.recorded_at <= h_end
+        ).order_by(EnergyReading.recorded_at.asc()).all()
+
+        if h_readings:
+            valid_e = [float(r.energy) for r in h_readings if r.energy is not None]
+            if valid_e:
+                d_delta = max(valid_e) - min(valid_e)
+                d_kwh = round(max(d_delta, valid_e[-1] if len(valid_e) == 1 else d_delta), 3)
+            else:
+                d_kwh = 0.0
+        else:
+            d_kwh = 0.0
+
+        d_cost = round(d_kwh * rate, 2)
+        if past_idx == 0:
+            d_label = f"Today ({hist_date.strftime('%d %b')})"
+        elif past_idx == 1:
+            d_label = f"Yesterday ({hist_date.strftime('%d %b')})"
+        else:
+            d_label = hist_date.strftime("%d %b (%a)")
+
+        daily_history.append({
+            "date": hist_date.strftime("%Y-%m-%d"),
+            "label": d_label,
+            "kwh": d_kwh,
+            "cost": d_cost,
+            "rate": rate
+        })
+
     return {
         "live": {
             "watts": live_watts,
@@ -185,12 +228,17 @@ def get_dashboard_summary(
         "this_month": {
             "kwh": user_month_kwh,
             "goal_kwh": user_goal_kwh,
-            "goal_pct": goal_pct
+            "goal_pct": goal_pct,
+            "remaining_kwh": remaining_kwh,
+            "days_left": days_left
         },
         "bill_estimate": {
             "amount": user_est_bill,
             "currency": "INR",
-            "due_date": "End of Month"
+            "due_date": "End of Month",
+            "rate_per_kwh": rate,
+            "current_month_kwh": user_month_kwh,
+            "daily_history": daily_history
         },
         "user": {
             "user_id": target_user.user_id if target_user else 1,
@@ -417,13 +465,12 @@ def get_alerts_notifications(
     Includes user-specific notifications plus shared hardware prototype alerts.
     """
     target_user = resolve_target_user(db, email)
-    u_id = target_user.user_id if target_user else None
+    u_id = target_user.user_id if target_user else 1
 
-    query = db.query(Notification)
-    if u_id:
-        query = query.filter((Notification.user_id == u_id) | (Notification.user_id == None))
+    # Filter strictly by target user so each user has isolated alerts
+    query = db.query(Notification).filter(Notification.user_id == u_id)
 
-    notifs = query.order_by(desc(Notification.notification_id)).limit(40).all()
+    notifs = query.order_by(desc(Notification.notification_id)).limit(50).all()
     alerts_list = []
 
     icon_map = {
@@ -433,19 +480,36 @@ def get_alerts_notifications(
         "success": ("checkmark-circle", "#10B981", "#D1FAE5"),
     }
 
+    now_ist = get_ist_now()
+    today_d = now_ist.date()
+    yesterday_d = today_d - timedelta(days=1)
+
     for n in notifs:
         c_type = (n.notification_type or "info").lower()
         if category and category.lower() != "all" and c_type != category.lower():
             continue
 
         icon, icon_col, badge_bg = icon_map.get(c_type, ("information-circle", "#3B82F6", "#DBEAFE"))
-        created_str = n.created_at.strftime("%I:%M %p") if n.created_at else "Just now"
+        
+        # Format exact IST date and time
+        if n.created_at:
+            dt_date = n.created_at.date()
+            t_str = n.created_at.strftime("%I:%M %p")
+            if dt_date == today_d:
+                created_str = f"Today, {t_str}"
+            elif dt_date == yesterday_d:
+                created_str = f"Yesterday, {t_str}"
+            else:
+                created_str = f"{n.created_at.strftime('%d %b')}, {t_str}"
+        else:
+            created_str = "Just now"
 
         alerts_list.append({
             "id": str(n.notification_id),
             "title": n.message.split(":")[0] if ":" in n.message else n.message,
             "description": n.message.split(":")[1].strip() if ":" in n.message else "System event registered.",
             "time": created_str,
+            "timestamp": created_str,
             "category": c_type,
             "icon": icon,
             "iconColor": icon_col,
@@ -472,17 +536,18 @@ def create_in_app_notification(payload: InAppNotificationPayload, db: Session = 
     Triggered when new device is added on phone, relay toggled, or routine completed.
     """
     target_user = resolve_target_user(db, payload.user_email)
+    u_id = target_user.user_id if target_user else 1
     dev = db.query(Device).filter(Device.device_uid == "ESP32-PZEM-PLUG-10A").first()
 
     full_msg = f"{payload.title}: {payload.message}" if payload.message else payload.title
 
     new_notif = Notification(
-        user_id=target_user.user_id if target_user else None,
+        user_id=u_id,
         device_id=dev.device_id if dev else 1,
         notification_type=payload.notification_type.lower(),
         message=full_msg,
         status="UNREAD",
-        created_at=datetime.utcnow()
+        created_at=get_ist_now().replace(tzinfo=None)
     )
     db.add(new_notif)
     db.commit()
@@ -499,10 +564,47 @@ def mark_all_notifications_read(email: Optional[str] = None, db: Session = Depen
     target_user = resolve_target_user(db, email)
     if target_user:
         db.query(Notification).filter(
-            (Notification.user_id == target_user.user_id) | (Notification.user_id == None)
+            Notification.user_id == target_user.user_id
         ).update({"status": "READ"}, synchronize_session=False)
         db.commit()
     return {"success": True, "message": "All notifications marked as read."}
+
+# ─── 5B. Monthly Energy Goal Management ──────────────────────────────────────
+
+class MonthlyGoalPayload(BaseModel):
+    email: Optional[str] = None
+    goal_kwh: float
+
+@router.post("/goal")
+def update_monthly_goal(payload: MonthlyGoalPayload, db: Session = Depends(get_db)):
+    """
+    Sets or updates the monthly energy target goal (kWh) for the authenticated user.
+    """
+    target_user = resolve_target_user(db, payload.email)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if payload.goal_kwh <= 0 or payload.goal_kwh > 10000:
+        raise HTTPException(status_code=400, detail="Energy goal must be between 1 and 10,000 kWh.")
+    
+    target_user.energy_goal_kwh = Decimal(str(round(payload.goal_kwh, 1)))
+    db.commit()
+    db.refresh(target_user)
+    return {
+        "success": True,
+        "message": f"Monthly energy goal updated to {float(target_user.energy_goal_kwh):.1f} kWh.",
+        "goal_kwh": float(target_user.energy_goal_kwh)
+    }
+
+@router.get("/bill/daily")
+def get_daily_bill_breakdown(email: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    """
+    Returns the daily energy usage (kWh) and bill amount (INR) for each of the last 14 days.
+    """
+    dash = get_dashboard_summary(email=email, db=db)
+    return {
+        "success": True,
+        "bill_estimate": dash["bill_estimate"]
+    }
 
 # ─── 6. AI Recommendations & Insights Endpoint ──────────────────────────────
 
