@@ -68,7 +68,7 @@ interface UserItem {
 
 export default function AdminScreen() {
   const router = useRouter();
-  const { state, logout, isDark, themeColors, togglePlugRelay } = useStore();
+  const { state, logout, isDark, themeColors } = useStore();
 
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -83,9 +83,8 @@ export default function AdminScreen() {
   const [searchUserQuery, setSearchUserQuery] = useState('');
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<'ALL' | 'ADMIN' | 'USER'>('ALL');
 
-  // Interactive Tariff Category & Simulation State
+  // Interactive Tariff Category State
   const [selectedTariffCategory, setSelectedTariffCategory] = useState<TariffCategory>('ALL');
-  const [simulatedKwh, setSimulatedKwh] = useState<number>(150);
   const [tariffFeedbackBanner, setTariffFeedbackBanner] = useState<string>('');
 
   // Tariff Modal State
@@ -665,38 +664,6 @@ export default function AdminScreen() {
                 })}
               </ScrollView>
             </View>
-
-            {/* Interactive Hardware Relay Control Console */}
-            <View style={[styles.relayControlCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
-              <View style={styles.relayControlHeader}>
-                <View style={[styles.relayIconBox, { backgroundColor: state.singlePlug.relayState === 'ON' ? 'rgba(0, 196, 140, 0.15)' : 'rgba(239, 68, 68, 0.15)' }]}>
-                  <Ionicons
-                    name="power"
-                    size={20}
-                    color={state.singlePlug.relayState === 'ON' ? '#00C48C' : '#EF4444'}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.relayControlTitle, { color: themeColors.text }]}>Hardware Relay Controller</Text>
-                  <Text style={[styles.relayControlSub, { color: themeColors.textSecondary }]}>
-                    ESP32 PZEM-004T Smart Plug Node • {state.singlePlug.relayState === 'ON' ? 'Active Relaying' : 'Load Cut Off'}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={[
-                    styles.relayToggleBtn,
-                    { backgroundColor: state.singlePlug.relayState === 'ON' ? '#EF4444' : '#00C48C' }
-                  ]}
-                  onPress={togglePlugRelay}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="power" size={14} color="#FFFFFF" />
-                  <Text style={styles.relayToggleBtnText}>
-                    {state.singlePlug.relayState === 'ON' ? 'Turn Relay OFF' : 'Turn Relay ON'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
           </View>
         )}
 
@@ -1032,78 +999,6 @@ export default function AdminScreen() {
                 </View>
               );
             })}
-
-            {/* Interactive Real-Time Bill Cost Simulator */}
-            <View style={[styles.simCard, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }]}>
-              <View style={styles.simHeader}>
-                <Ionicons name="calculator-outline" size={18} color="#00C48C" />
-                <View style={{ flex: 1, marginLeft: 8 }}>
-                  <Text style={[styles.simTitle, { color: themeColors.text }]}>Interactive Bill Impact Simulator</Text>
-                  <Text style={[styles.simSub, { color: themeColors.textSecondary }]}>
-                    Preview estimated monthly billing across different household consumption tiers
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={[styles.simKwhLabel, { color: themeColors.textSecondary }]}>SELECT MONTHLY CONSUMPTION:</Text>
-              <View style={styles.simKwhChipsRow}>
-                {[50, 100, 150, 250, 500].map((kwh) => (
-                  <TouchableOpacity
-                    key={kwh}
-                    style={[
-                      styles.simKwhChip,
-                      simulatedKwh === kwh && styles.simKwhChipActive,
-                      { borderColor: simulatedKwh === kwh ? '#00C48C' : themeColors.subCardBorder },
-                    ]}
-                    onPress={() => setSimulatedKwh(kwh)}
-                    activeOpacity={0.75}
-                  >
-                    <Text
-                      style={[
-                        styles.simKwhChipText,
-                        { color: simulatedKwh === kwh ? '#00C48C' : themeColors.textSecondary },
-                      ]}
-                    >
-                      {kwh} kWh
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <View style={[styles.simResultBox, { backgroundColor: themeColors.subCardBg, borderColor: themeColors.subCardBorder }]}>
-                <View style={styles.simResultLeft}>
-                  <Text style={[styles.simResultLabel, { color: themeColors.textSecondary }]}>
-                    BILL AT ACTIVE RATE ({activeTariffObj?.tariff_name || 'Standard'}):
-                  </Text>
-                  <Text style={styles.simResultNum}>
-                    ₹{((activeTariffObj?.rate_per_kwh || 6.5) * simulatedKwh).toFixed(2)}
-                  </Text>
-                  <Text style={[styles.simResultFormula, { color: themeColors.textMuted }]}>
-                    {simulatedKwh} kWh × ₹{activeTariffObj?.rate_per_kwh || 6.5}/kWh
-                  </Text>
-                </View>
-
-                <View style={styles.simResultDivider} />
-
-                <View style={styles.simResultRight}>
-                  <Text style={[styles.simComparisonTitle, { color: themeColors.textSecondary }]}>ALTERNATIVE SCHEMES:</Text>
-                  {tariffs
-                    .filter((t) => t.tariff_id !== activeTariffObj?.tariff_id && t.id !== activeTariffObj?.id)
-                    .slice(0, 3)
-                    .map((alt) => {
-                      const cost = alt.rate_per_kwh * simulatedKwh;
-                      return (
-                        <View key={alt.tariff_id || alt.id} style={styles.simAltRow}>
-                          <Text style={[styles.simAltName, { color: themeColors.textSecondary }]} numberOfLines={1}>
-                            {alt.tariff_name}:
-                          </Text>
-                          <Text style={[styles.simAltVal, { color: themeColors.text }]}>₹{cost.toFixed(2)}</Text>
-                        </View>
-                      );
-                    })}
-                </View>
-              </View>
-            </View>
           </View>
         )}
 
@@ -1160,21 +1055,6 @@ export default function AdminScreen() {
                       </Text>
                     </View>
                   </View>
-
-                  {/* Interactive Relay Switch */}
-                  <TouchableOpacity
-                    style={[
-                      styles.deviceRelayActionBtn,
-                      { backgroundColor: isRelayOn ? 'rgba(239, 68, 68, 0.12)' : 'rgba(0, 196, 140, 0.12)', borderColor: isRelayOn ? '#EF4444' : '#00C48C' },
-                    ]}
-                    onPress={togglePlugRelay}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="power" size={15} color={isRelayOn ? '#EF4444' : '#00C48C'} />
-                    <Text style={[styles.deviceRelayActionText, { color: isRelayOn ? '#EF4444' : '#00C48C' }]}>
-                      {isRelayOn ? 'Disconnect Relay Power (Turn OFF)' : 'Connect Relay Power (Turn ON)'}
-                    </Text>
-                  </TouchableOpacity>
                 </View>
               );
             })}
