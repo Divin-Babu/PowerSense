@@ -609,25 +609,66 @@ def get_daily_bill_breakdown(email: Optional[str] = Query(None), db: Session = D
 # ─── 6. AI Recommendations & Insights Endpoint ──────────────────────────────
 
 @router.get("/recommendations")
-def get_ai_recommendations(db: Session = Depends(get_db)):
-    recs = db.query(AiRecommendation).all()
-    rec_list = []
-    for r in recs:
-        rec_list.append({
-            "id": r.recommendation_id,
-            "recommendation": r.recommendation,
-            "source_type": r.source_type,
-            "created_at": r.created_at.isoformat() if r.created_at else None
-        })
+def get_ai_recommendations(email: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    target_user = resolve_target_user(db, email)
+    u_id = target_user.user_id if target_user else 1
+
+    # Fetch user's actual reading to make savings realistic
+    now = get_ist_now().replace(tzinfo=None)
+    start_of_month = datetime(now.year, now.month, 1)
+    month_readings = db.query(EnergyReading).filter(
+        EnergyReading.user_id == u_id,
+        EnergyReading.timestamp >= start_of_month
+    ).all()
+    month_kwh = sum(r.energy_delta_kwh for r in month_readings if r.energy_delta_kwh)
+
+    active_tariff = db.query(Tariff).filter(Tariff.is_active == True).order_by(Tariff.tariff_id.desc()).first()
+    rate = float(active_tariff.base_rate) if active_tariff else 6.50
+
+    # Dynamic potential savings: ~15% to 22% of monthly projected spend
+    projected_spend = max(50.0, (month_kwh / max(1, now.day)) * 30 * rate)
+    est_savings = round(projected_spend * 0.18, 0)
+
+    # Dynamic diverse recommendations
+    dynamic_recs = [
+        {
+            "id": "rec-1",
+            "title": "Set AC to 24°C Ideal Temperature",
+            "recommendation": "Setting your air conditioner to 24°C instead of 18°C reduces compressor workload and saves ~6% on electricity bills per degree.",
+            "category": "Cooling",
+            "potential_savings": f"₹ {int(est_savings * 0.45)}/mo"
+        },
+        {
+            "id": "rec-2",
+            "title": "Eliminate Standby Phantom Loads",
+            "recommendation": "Appliances like TVs, microwave clocks, and setup boxes in standby mode consume 5W–20W continuously. Use automated night cut-off timers.",
+            "category": "Phantom Load",
+            "potential_savings": f"₹ {int(est_savings * 0.25)}/mo"
+        },
+        {
+            "id": "rec-3",
+            "title": "Shift Heavy Cycles from Peak Hours",
+            "recommendation": "Run washing machines and water geysers in early mornings or late evenings outside the 6:00 PM – 10:00 PM peak tariff window.",
+            "category": "Peak Shaving",
+            "potential_savings": f"₹ {int(est_savings * 0.30)}/mo"
+        },
+        {
+            "id": "rec-4",
+            "title": "Refrigeration Defrost & Ventilation",
+            "recommendation": "Maintain a 3-inch gap between your refrigerator and the wall for rear coil heat dissipation, reducing compressor duty cycles by 12%.",
+            "category": "Appliance Health",
+            "potential_savings": "Extended Lifespan"
+        }
+    ]
 
     return {
         "monthly_insight": {
             "title": "Monthly Energy Optimization",
-            "description": "Operating your smart plug during off-peak tariff hours can reduce spend by up to 28%."
+            "description": f"By shifting high-draw appliances to off-peak hours and enabling smart plug timers, your household can save up to ₹ {int(est_savings)} this month."
         },
-        "potential_savings": "₹ 245",
-        "savings_banner": "You can save up to ₹ 245 this month by optimizing usage!",
-        "recommendations": rec_list
+        "potential_savings": f"₹ {int(est_savings)}",
+        "savings_banner": f"You can save up to ₹ {int(est_savings)} this month by optimizing usage!",
+        "recommendations": dynamic_recs
     }
 
 # ─── 7. Knowledge Documents Endpoint ────────────────────────────────────────
@@ -657,50 +698,190 @@ class AiChatPayload(BaseModel):
 
 @router.post("/ai-chat")
 def ask_ai_product_chat(payload: AiChatPayload, db: Session = Depends(get_db)):
-    q_lower = payload.question.strip().lower()
+    q = payload.question.strip()
+    q_lower = q.lower()
     t = payload.telemetry or {}
 
-    volts = t.get("voltage", 230.4)
-    amps = t.get("current", 1.25)
-    watts = t.get("watts", 288.0)
-    kwh = t.get("kwh", 1.45)
+    volts = float(t.get("voltage", 230.4))
+    amps = float(t.get("current", 1.25))
+    watts = float(t.get("watts", 288.0))
+    kwh = float(t.get("kwh", 1.45))
     relay_on = t.get("relay_state", "ON") == "ON"
+    active_rate = 6.50
 
-    if any(k in q_lower for k in ["what is", "how does", "overview", "product", "powersense", "hardware", "spec", "pzem"]):
+    # 1. Greetings & Casual Chat
+    if any(k in q_lower for k in ["hi", "hello", "hey", "good morning", "good evening", "namaste", "what's up", "howdy"]):
         reply = (
-            "🤖 **PowerSense AI Smart Plug Product Overview**:\n\n"
-            "• **Core Hardware**: Dual-Core ESP32 Microcontroller paired with PZEM-004T v3 Energy Monitoring Transducer.\n"
-            "• **Live Metering**: High-precision AC True RMS Voltage (80-260V), Current (0-10A), Active Power (W), Cumulative Energy (kWh), Frequency (50Hz), and Power Factor.\n"
-            "• **Power Supply**: Integrated HLK-PM01 5V AC-DC converter powering the internal electronics directly from mains.\n"
-            "• **Dual Relay Channels**: Primary inline safety relay (CH1) + Aux relay (CH2) for sub-circuit cutoff.\n"
-            "• **Connectivity**: 2.4GHz Wi-Fi telemetry ingestion at 1.0 Hz + BLE provisioning for mobile pairing."
+            "👋 **Hello! I'm your PowerSense AI Energy Assistant**.\n\n"
+            "I'm here to help you understand your power consumption, clear doubts about household appliances, "
+            "calculate electricity costs, find smart ways to lower your electricity bill, and verify electrical safety.\n\n"
+            "What would you like to know or check today?"
         )
-    elif any(k in q_lower for k in ["live", "current reading", "power", "watt", "voltage", "amperage", "reading"]):
-        relay_desc = "ACTIVE (Relay ON)" if relay_on else "CUTOFF (Relay OFF)"
+
+    # 2. Identity & Capabilities
+    elif any(k in q_lower for k in ["who are you", "what can you do", "introduce", "help me", "your name", "features"]):
         reply = (
-            f"⚡ **Live Sensor Telemetry**:\n\n"
-            f"• **Relay Status**: {relay_desc}\n"
+            "🤖 **I'm PowerSense AI Assistant**, your personal smart home energy companion!\n\n"
+            "Here are some things you can ask me:\n"
+            "• **Appliance Power Usage**: Ask about ACs, fridges, geysers, induction cookers, or TVs.\n"
+            "• **Bill Calculations**: Ask how electricity units (kWh) and bill charges are calculated.\n"
+            "• **Saving Strategies**: Discover practical ways to cut 15%–25% off your monthly power spend.\n"
+            "• **Electrical Doubts**: Learn about Voltage, Current (Amps), Power Factor, surges, and earthing.\n"
+            "• **Live Diagnostic**: Ask *'How much power am I using right now?'* to check your active plug load.\n\n"
+            "Feel free to ask any doubt in plain words!"
+        )
+
+    # 3. Air Conditioner (AC) Doubts
+    elif any(k in q_lower for k in ["ac", "air conditioner", "cooling", "1.5 ton", "inverter ac"]):
+        reply = (
+            "❄️ **Air Conditioner Power & Savings Guide**:\n\n"
+            "• **Power Draw**: A typical 1.5-ton 3-star AC draws **1,400W – 1,800W** when the compressor runs, consuming about **1.4 – 1.8 units (kWh) per hour**.\n"
+            "• **Inverter AC Advantage**: A 5-star inverter AC throttles down to **400W – 800W** once the room reaches target temperature, saving 30%–40% energy.\n"
+            "• **Ideal Temperature**: Set your thermostat to **24°C**. Every 1°C increase saves roughly **6% electricity**.\n"
+            "• **Pro Tip**: Use a ceiling fan on low speed alongside the AC to circulate cool air evenly without lowering the temperature setting."
+        )
+
+    # 4. Refrigerator Doubts
+    elif any(k in q_lower for k in ["fridge", "refrigerator", "defrost", "freezer"]):
+        reply = (
+            "🧊 **Refrigerator Energy Efficiency Guide**:\n\n"
+            "• **Daily Consumption**: A modern 250L frost-free refrigerator consumes **1.0 to 1.8 units (kWh) per day** (about 120W–250W during active cooling cycles).\n"
+            "• **Keep Ventilation Space**: Leave at least **3 to 4 inches clearance** between the back of the fridge and the wall for heat dissipation.\n"
+            "• **Check Door Gaskets**: Place a sheet of paper in the door seal. If it pulls out easily, warm room air is leaking in, forcing the compressor to run 20% longer.\n"
+            "• **Optimal Temp Setting**: 3°C to 4°C for the main fridge compartment and -18°C for the freezer is ideal."
+        )
+
+    # 5. Geyser / Water Heater Doubts
+    elif any(k in q_lower for k in ["geyser", "water heater", "boiler", "hot water"]):
+        reply = (
+            "🚿 **Water Geyser Power & Safety Guide**:\n\n"
+            "• **High Wattage**: Geysers draw **2,000W to 3,000W** (approx 1 unit of electricity every 20–30 minutes).\n"
+            "• **Biggest Mistake**: Leaving the geyser turned ON continuously throughout the day wastes 2 to 3 extra units just reheating cooling water.\n"
+            "• **Savings Tip**: Switch the geyser ON 15–20 minutes before bathing and turn it OFF immediately after. This simple habit saves **₹350 – ₹500 every month**!"
+        )
+
+    # 6. Iron Box, Induction Cooktop & Kitchen Appliances
+    elif any(k in q_lower for k in ["iron", "iron box", "induction", "microwave", "cooktop", "oven", "mixer"]):
+        reply = (
+            "🍳 **Kitchen & Heating Appliance Consumption**:\n\n"
+            "• **Dry / Steam Iron**: Draws **1,000W – 1,500W**. Best practice: Iron clothes in a single batch so you don't repeatedly heat the soleplate from cold.\n"
+            "• **Induction Cooktop**: Draws **1,200W – 2,000W**. However, it is ~84% energy-efficient (compared to ~40% for LPG gas stoves), cooking faster and wasting less heat.\n"
+            "• **Microwave Oven**: Draws **800W – 1,400W**, but runs for only 2–5 minutes at a time, consuming just ~0.05 units per use."
+        )
+
+    # 7. Television, PC & Gaming Consoles
+    elif any(k in q_lower for k in ["tv", "television", "computer", "pc", "laptop", "gaming", "ps5", "xbox"]):
+        reply = (
+            "🖥️ **Electronics & Entertainment Consumption**:\n\n"
+            "• **LED / Smart TV (43\" - 55\")**: Draws **50W – 110W** (~0.1 unit per hour of watching).\n"
+            "• **Laptop**: Draws **45W – 90W** (extremely efficient compared to desktop towers).\n"
+            "• **Desktop PC + Monitor**: Draws **150W – 350W** depending on CPU/GPU workload.\n"
+            "• **Gaming Consoles (PS5 / Xbox)**: Draws **160W – 220W** while gaming, and ~2W in rest mode."
+        )
+
+    # 8. Electricity Bill & Units Calculation
+    elif any(k in q_lower for k in ["calculate", "formula", "unit", "units", "kwh", "how bill", "how is bill"]):
+        reply = (
+            "📐 **How Electricity Units & Bills Are Calculated**:\n\n"
+            "• **The Golden Formula**:\n"
+            "  $$\\text{Units (kWh)} = \\frac{\\text{Power (Watts)} \\times \\text{Hours Used}}{1000}$$\n\n"
+            "• **Real-World Example**:\n"
+            "  A **1,000W iron box** running for **2 hours**:\n"
+            "  $$\\frac{1000 \\times 2}{1000} = 2.0 \\text{ Units (kWh)}$$\n"
+            f"  At an average rate of **₹{active_rate}/unit**, the cost is: **₹{2.0 * active_rate:.2f}**.\n\n"
+            "• **Monthly Bill Structure**: Total Bill = (Total Units Consumed × Slab Rate) + Fixed Meter Charges + Electricity Duty/Taxes."
+        )
+
+    # 9. Lowering Electricity Bills & Energy Saving Strategies
+    elif any(k in q_lower for k in ["save", "reduce bill", "lower bill", "high bill", "why is bill high", "tips", "less electricity"]):
+        reply = (
+            "💡 **Top 5 Practical Ways to Lower Your Electricity Bill**:\n\n"
+            "1. **Set AC to 24°C**: Saves ~6% per degree compared to 18°C or 20°C.\n"
+            "2. **Eliminate Standby Power**: Smart TVs, set-top boxes, and chargers left plugged in waste 5W–20W continuously (approx ₹150–₹250/mo in phantom power).\n"
+            "3. **Switch to 9W–12W LED Bulbs**: Upgrading 5 old incandescent bulbs to LEDs saves ~40 units (₹260) every month.\n"
+            "4. **Shift High Loads from Peak Hours (6 PM – 10 PM)**: Peak time tariffs carry higher surcharges. Run washing machines and water pumps during off-peak times.\n"
+            "5. **Use Smart Plug Schedules**: Schedule automated cut-offs for bedroom appliances while you sleep."
+        )
+
+    # 10. Power Factor & Electrical Concepts Explained Simply
+    elif any(k in q_lower for k in ["power factor", "pf", "powerfactor"]):
+        reply = (
+            "⚡ **What is Power Factor (PF)?**\n\n"
+            "• **Simple Analogy**: Think of a glass of soda. The liquid is the real, usable power (**kW**) that does actual work, while the foam on top is reactive power (**kVAR**). The entire volume of the glass is apparent power (**kVA**).\n"
+            "• **The Math**: $\\text{Power Factor} = \\frac{\\text{Real Power (kW)}}{\\text{Apparent Power (kVA)}}$. It ranges from **0.0 to 1.0**.\n"
+            "• **Ideal Range**: **0.95 to 1.0** is ideal. A low PF (<0.85) means inductive motors (like old fans or compressors) are drawing extra reactive current, stressing wiring and wasting grid energy."
+        )
+
+    # 11. Voltage, Brownouts & Surges
+    elif any(k in q_lower for k in ["voltage", "low voltage", "high voltage", "surge", "brownout", "fluctuation", "volt"]):
+        reply = (
+            "🔌 **Line Voltage & Fluctuations Explained**:\n\n"
+            f"• **Your Current Voltage**: Currently reading **{volts:.1f} V** (Nominal standard is 220V–240V AC).\n"
+            "• **Low Voltage (<205V - Brownouts)**: When voltage drops, electric motors (fridge/AC compressors) must draw *more current* to deliver the same power, causing dangerous overheating.\n"
+            "• **High Voltage (>250V - Surges)**: Dangerous spikes can damage sensitive electronics like televisions and inverter boards.\n"
+            "• **Protection**: PowerSense monitors line voltage continuously and alerts you when values deviate outside safe limits."
+        )
+
+    # 12. Watts vs Watt-Hours (kWh)
+    elif any(k in q_lower for k in ["watt vs", "difference between watt", "difference between kwh", "what is watt", "what is kwh"]):
+        reply = (
+            "⚖️ **Difference Between Watts (W) and kWh (Units)**:\n\n"
+            "• **Watts (W)** = **Speed / Rate of Energy Draw**.\n"
+            "  Like the speedometer in your car showing **60 km/h** right now.\n"
+            "• **kWh (Kilowatt-Hour)** = **Total Energy Consumed Over Time**.\n"
+            "  Like the odometer showing you drove **60 kilometers** after 1 hour.\n\n"
+            "• **Key Fact**: 1 Kilowatt (kW) = 1,000 Watts. Using 1,000 Watts continuously for 1 hour equals **1 kWh = 1 Unit** on your electricity meter."
+        )
+
+    # 13. Electrical Safety & Socket Ratings
+    elif any(k in q_lower for k in ["safe", "safety", "shock", "earthing", "ground", "16a", "6a", "extension", "fire"]):
+        reply = (
+            "🛡️ **Household Electrical Safety Essentials**:\n\n"
+            "• **16A vs 6A Sockets**: High-power appliances (geysers, ACs, heaters, microwaves) draw over 6 Amps and **must** be connected to heavy-duty 16A sockets with 2.5mm² wiring.\n"
+            "• **Avoid Daisy-Chaining Extension Cords**: Multi-plug extension cords can overheat if multiple heavy devices are plugged into the same board.\n"
+            "• **Earthing (Ground Pin)**: The third (top) round pin provides a safe emergency path for leakage current to prevent electric shocks.\n"
+            "• **Safe Load Ceiling**: PowerSense monitors up to **10 Amps (~2,300W)** and provides automated thermal warnings if loads exceed continuous safe limits."
+        )
+
+    # 14. Live Diagnostic & Current Telemetry Status
+    elif any(k in q_lower for k in ["live", "current status", "reading", "now", "what is running", "how much am i using", "power draw"]):
+        relay_desc = "ACTIVE (Relay ON)" if relay_on else "STANDBY (Relay OFF)"
+        reply = (
+            f"📊 **Live Smart Plug Diagnostic Report**:\n\n"
+            f"• **Relay State**: **{relay_desc}**\n"
             f"• **Active Power**: **{watts:.1f} W**\n"
-            f"• **Mains Voltage**: **{volts:.1f} V** (Nominal standard)\n"
+            f"• **Line Voltage**: **{volts:.1f} V** (Standard nominal)\n"
             f"• **Current Draw**: **{amps:.2f} A**\n"
-            f"• **Today Energy**: **{kwh:.3f} kWh**\n"
-            f"• **Cost Estimate**: **₹ {kwh * 6.50:.2f}**\n\n"
-            "Sensor reading is healthy with stable power factor."
+            f"• **Today Energy**: **{kwh:.3f} kWh (Units)**\n"
+            f"• **Today Spend**: **₹ {kwh * active_rate:.2f}** (@ ₹{active_rate}/unit)\n\n"
+            "Everything is operating normally within safe thermal parameters."
         )
-    elif any(k in q_lower for k in ["save", "bill", "reduce", "optimize", "cost", "tariff"]):
+
+    # 15. Gratitude & Pleasantries
+    elif any(k in q_lower for k in ["thank you", "thanks", "awesome", "great", "ok", "got it", "cool", "perfect"]):
         reply = (
-            "💡 **Energy Saving Recommendations**:\n\n"
-            "1. **Peak Tariff Shaving**: Shift heavy loads outside 6:00 PM – 10:00 PM to take advantage of lower ₹4.20/kWh rates.\n"
-            "2. **Standby Cutoff**: Enable automated timers in the Dashboard to eliminate phantom idle loads (saves 2W-15W continuously).\n"
-            "3. **Surge Warning**: Current limit is set to 1,450 W (10A safe ceiling). Staying below 1,200 W extends equipment lifespan."
+            "😊 **You're very welcome!**\n\n"
+            "I'm always here if you have any questions about saving electricity, appliance ratings, calculating bills, or managing your smart home. Have a wonderful day!"
         )
+
+    # 16. Smart Conversational Fallback (Thorough & Helpful)
     else:
         reply = (
-            f"PowerSense AI Assistant: Your ESP32 Smart Plug is ONLINE with live load at {watts:.1f} W and {volts:.1f} V. "
-            "You can ask me about hardware specifications, live power, energy saving tips, or smart scheduling!"
+            f"💡 **PowerSense Assistant Response**:\n\n"
+            f"Regarding *\"{q}\"*:\n\n"
+            "• **Energy Consideration**: Every household appliance's cost depends on its rated wattage and daily run hours ($$\\text{Units} = \\frac{\\text{Watts} \\times \\text{Hours}}{1000}$).\n"
+            f"• **Live Status**: Your smart plug is currently **{('drawing ' + str(round(watts, 1)) + ' W') if relay_on else 'idle (Relay OFF)'}** at **{volts:.1f} V**.\n"
+            "• **Suggestions**: You can ask me specific questions like:\n"
+            "  - *\"How much power does a 1.5 ton AC consume?\"*\n"
+            "  - *\"How do I calculate units from watts?\"*\n"
+            "  - *\"Why is my electricity bill so high?\"*\n"
+            "  - *\"What is the ideal temperature for a refrigerator?\"*\n"
+            "  - *\"What is Power Factor?\"*"
         )
 
     return {"answer": reply, "question": payload.question}
+
+# ─── 9. User-Specific Schedules Endpoints ─────────────────────────────────────
 
 # ─── 9. User-Specific Schedules Endpoints ─────────────────────────────────────
 

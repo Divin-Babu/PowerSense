@@ -699,9 +699,10 @@ export async function markAllAlertsReadApi(email) {
   }
 }
 
-export async function fetchAiRecommendationsData() {
+export async function fetchAiRecommendationsData(email) {
   try {
-    const res = await fetchWithTimeout(`${getDataUrl()}/recommendations`);
+    const query = email ? `?email=${encodeURIComponent(email)}` : '';
+    const res = await fetchWithTimeout(`${getDataUrl()}/recommendations${query}`);
     if (!res.ok) throw new Error('Failed to fetch recommendations');
     return await res.json();
   } catch (e) {
