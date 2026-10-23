@@ -1,4 +1,4 @@
-from sqlalchemy import Column, BigInteger, String, Numeric, Date
+from sqlalchemy import Column, BigInteger, String, Numeric, Date, Boolean
 from database import Base
 
 class Tariff(Base):
@@ -9,6 +9,7 @@ class Tariff(Base):
     rate_per_kwh = Column(Numeric(10, 2), nullable=False)  # ₹ / kWh
     effective_from = Column(Date, nullable=True)
     effective_to = Column(Date, nullable=True)
+    is_active = Column(Boolean, default=False)
 
     def to_dict(self):
         return {
@@ -18,4 +19,5 @@ class Tariff(Base):
             "rate_per_kwh": float(self.rate_per_kwh) if self.rate_per_kwh is not None else 6.50,
             "effective_from": self.effective_from.isoformat() if self.effective_from else None,
             "effective_to": self.effective_to.isoformat() if self.effective_to else None,
+            "is_active": bool(self.is_active) if self.is_active is not None else False,
         }

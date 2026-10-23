@@ -541,6 +541,20 @@ export async function updateTariffById(tariffId, tariffData) {
   }
 }
 
+export async function activateTariffById(tariffId) {
+  try {
+    const res = await fetch(`${ADMIN_BASE_URL}/tariffs/${tariffId}/activate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to activate tariff');
+    return data;
+  } catch (e) {
+    throw new Error(e.message || 'Failed to activate tariff');
+  }
+}
+
 export async function deleteTariffById(tariffId) {
   try {
     const res = await fetch(`${ADMIN_BASE_URL}/tariffs/${tariffId}`, {

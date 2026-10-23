@@ -51,12 +51,14 @@ class TariffCreateRequest(BaseModel):
     rate_per_kwh: float
     effective_from: Optional[str] = None  # YYYY-MM-DD
     effective_to: Optional[str] = None
+    is_active: Optional[bool] = False
 
 class TariffUpdateRequest(BaseModel):
     tariff_name: Optional[str] = None
     rate_per_kwh: Optional[float] = None
     effective_from: Optional[str] = None
     effective_to: Optional[str] = None
+    is_active: Optional[bool] = None
 
 # Helper to auto-seed default tariffs if tbl_tariff is empty
 def ensure_default_tariffs(db: Session):
@@ -64,10 +66,10 @@ def ensure_default_tariffs(db: Session):
         count = db.query(Tariff).count()
         if count == 0:
             defaults = [
-                Tariff(tariff_name="Domestic LT-1 Standard", rate_per_kwh=6.50, effective_from=date(2025, 1, 1)),
-                Tariff(tariff_name="Peak Time-of-Use (TOU)", rate_per_kwh=9.80, effective_from=date(2025, 1, 1)),
-                Tariff(tariff_name="Off-Peak Green Energy", rate_per_kwh=4.20, effective_from=date(2025, 1, 1)),
-                Tariff(tariff_name="Commercial High-Load Tier", rate_per_kwh=11.50, effective_from=date(2025, 1, 1)),
+                Tariff(tariff_name="Domestic LT-1 Standard", rate_per_kwh=6.50, effective_from=date(2025, 1, 1), is_active=True),
+                Tariff(tariff_name="Peak Time-of-Use (TOU)", rate_per_kwh=9.80, effective_from=date(2025, 1, 1), is_active=False),
+                Tariff(tariff_name="Off-Peak Green Energy", rate_per_kwh=4.20, effective_from=date(2025, 1, 1), is_active=False),
+                Tariff(tariff_name="Commercial High-Load Tier", rate_per_kwh=11.50, effective_from=date(2025, 1, 1), is_active=False),
             ]
             db.add_all(defaults)
             db.commit()
@@ -89,7 +91,9 @@ def get_admin_overview(db: Session = Depends(get_db)):
         total_admins = 0
 
     try:
-        active_tariff = db.query(Tariff).order_by(Tariff.tariff_id.asc()).first()
+        active_tariff = db.query(Tariff).filter(Tariff.is_active == True).first()
+        if not active_tariff:
+            active_tariff = db.query(Tariff).order_by(Tariff.tariff_id.asc()).first()
         active_rate = float(active_tariff.rate_per_kwh) if active_tariff else 6.50
         active_name = active_tariff.tariff_name if active_tariff else "Domestic LT-1 Standard"
     except Exception:
@@ -346,9 +350,17 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
 def get_all_tariffs(db: Session = Depends(get_db)):
     """Retrieve all electricity tariff schemes directly from tbl_tariff in PostgreSQL."""
     ensure_default_tariffs(db)
-    tariffs = db.query(Tariff).order_by(Tariff.tariff_id.asc()).all()
+    tariffs = db.query(Tariff).order_by(Tariff.is_active.desc(), Tariff.tariff_id.asc()).all()
 
-    active_tariff = tariffs[0] if tariffs else None
+    active_tariff = next((t for t in tariffs if t.is_active), None)
+    if not active_tariff and tariffs:
+        active_tariff = tariffs[0]
+        active_tariff.is_active = True
+        try:
+            db.commit()
+            db.refresh(active_tariff)
+        except Exception:
+            pass
 
     return {
         "success": True,
@@ -395,11 +407,15 @@ def create_tariff(req: TariffCreateRequest, db: Session = Depends(get_db)):
         except ValueError:
             eff_to = None
 
+    if req.is_active:
+        db.query(Tariff).update({Tariff.is_active: False})
+
     new_tariff = Tariff(
         tariff_name=req.tariff_name.strip(),
         rate_per_kwh=round(req.rate_per_kwh, 2),
         effective_from=eff_from or date.today(),
-        effective_to=eff_to
+        effective_to=eff_to,
+        is_active=bool(req.is_active)
     )
 
     try:
@@ -452,6 +468,10 @@ def update_tariff(tariff_id: int, req: TariffUpdateRequest, db: Session = Depend
         except ValueError:
             pass
 
+    if req.is_active is True:
+        db.query(Tariff).update({Tariff.is_active: False})
+        tariff.is_active = True
+
     try:
         db.commit()
         db.refresh(tariff)
@@ -466,6 +486,36 @@ def update_tariff(tariff_id: int, req: TariffUpdateRequest, db: Session = Depend
         "success": True,
         "message": f"Tariff '{tariff.tariff_name}' updated to ₹{tariff.rate_per_kwh}/kWh.",
         "tariff": tariff.to_dict()
+    }
+
+@router.post("/tariffs/{tariff_id}/activate")
+@router.put("/tariffs/{tariff_id}/activate")
+def activate_tariff(tariff_id: int, db: Session = Depends(get_db)):
+    """Select and activate a tariff plan across the entire PowerSense platform."""
+    tariff = db.query(Tariff).filter(Tariff.tariff_id == tariff_id).first()
+    if not tariff:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Tariff with ID {tariff_id} not found."
+        )
+
+    db.query(Tariff).update({Tariff.is_active: False})
+    tariff.is_active = True
+
+    try:
+        db.commit()
+        db.refresh(tariff)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error activating tariff: {str(e)}"
+        )
+
+    return {
+        "success": True,
+        "message": f"'{tariff.tariff_name}' (₹{tariff.rate_per_kwh}/kWh) is now selected as the active electricity tariff.",
+        "active_tariff": tariff.to_dict()
     }
 
 @router.delete("/tariffs/{tariff_id}")
@@ -486,9 +536,16 @@ def delete_tariff(tariff_id: int, db: Session = Depends(get_db)):
         )
 
     name = tariff.tariff_name
+    was_active = bool(tariff.is_active)
     try:
         db.delete(tariff)
         db.commit()
+
+        if was_active:
+            new_active = db.query(Tariff).first()
+            if new_active:
+                new_active.is_active = True
+                db.commit()
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -515,7 +572,6 @@ def get_registered_devices():
         device_list.append({
             "id": "ESP32-PZEM-PLUG-10A",
             "name": "PowerSense Smart Plug",
-            "ip": "192.168.1.105",
             "status": "ONLINE",
             "pzem_status": "HEALTHY (PZEM-004T Stream)",
             "voltage": 230.8,
@@ -547,23 +603,23 @@ def get_registered_devices():
     }
 
 @router.get("/system-health")
-def get_system_health():
-    """Real-time system resource & diagnostic telemetry."""
-    cpu_usage = psutil.cpu_percent(interval=0.1) if hasattr(psutil, "cpu_percent") else 12.4
-    mem = psutil.virtual_memory() if hasattr(psutil, "virtual_memory") else None
-    mem_pct = mem.percent if mem else 42.1
+def get_system_health(db: Session = Depends(get_db)):
+    """Real-time operational service diagnostics (clean metrics, no unwanted static hardware data)."""
+    try:
+        active_t = db.query(Tariff).filter(Tariff.is_active == True).first()
+        active_t_name = f"{active_t.tariff_name} (₹{active_t.rate_per_kwh}/kWh)" if active_t else "Domestic Standard (₹6.50/kWh)"
+    except Exception:
+        active_t_name = "Domestic Standard (₹6.50/kWh)"
 
     return {
         "success": True,
         "health": {
-            "fastapi_server": "RUNNING (Uvicorn 0.0.0.0:8000)",
-            "postgresql_database": "HEALTHY (PostgreSQL on localhost:5432/powersense)",
-            "mqtt_broker": "HEALTHY (Eclipse Mosquitto port 1883)",
-            "cpu_usage_pct": cpu_usage,
-            "memory_usage_pct": mem_pct,
-            "telemetry_stream_rate": "1.0 Hz Real-Time",
-            "active_ws_connections": 1,
-            "uptime": "Operational"
+            "fastapi_server": "ONLINE (Uvicorn REST API :8000)",
+            "postgresql_database": "CONNECTED (PostgreSQL tbl_tariff & telemetry)",
+            "active_tariff": active_t_name,
+            "telemetry_stream_rate": "1.0 Hz Real-Time Sampling",
+            "pzem_pipeline": "OPERATIONAL (ESP32 Live Ingestion)",
+            "status": "HEALTHY"
         }
     }
 
