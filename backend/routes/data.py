@@ -13,6 +13,14 @@ def get_ist_now() -> datetime:
     """Return current timestamp normalized to Indian Standard Time (IST)."""
     return datetime.now(timezone.utc).astimezone(IST)
 
+def to_naive_ist(dt: Optional[datetime]) -> Optional[datetime]:
+    """Safely converts any datetime (aware or naive) to naive Indian Standard Time for consistent comparisons."""
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(IST).replace(tzinfo=None)
+    return dt
+
 from database import get_db
 from models import (
     User,
@@ -153,7 +161,10 @@ def get_dashboard_summary(
         else:
             w_start = today_start + timedelta(hours=slot_h)
             w_end = w_start + timedelta(hours=2)
-            slot_records = [r for r in today_db_readings if w_start <= r.recorded_at < w_end]
+            slot_records = [
+                r for r in today_db_readings
+                if r.recorded_at and w_start <= to_naive_ist(r.recorded_at) < w_end
+            ]
             if slot_records:
                 valid_p = [float(r.power or 0.0) for r in slot_records]
                 avg_w = sum(valid_p) / len(valid_p) if valid_p else 0.0
